@@ -1,0 +1,306 @@
+const express = require("express");
+const router = express.Router();
+const User = require("../models/User");
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
+
+// ------------------------------------------------------
+// POST /api/auth/signup
+// ------------------------------------------------------
+router.post("/signup", async (req, res) => {
+  try {
+    const { name, email, phone, password } = req.body;
+
+    console.log("📝 SIGNUP:", {
+      name,
+      email,
+      phone: phone?.substring(0, 4) + "****",
+    });
+
+    if (!name || !email || !phone || !password) {
+      return res.status(400).json({
+        status: false,
+        message: "All fields required",
+      });
+    }
+
+    const exists = await User.findOne({
+      $or: [{ email: email.toLowerCase() }, { phone }],
+    });
+
+    if (exists) {
+      console.log("❌ USER EXISTS:", exists.email);
+      return res.status(400).json({
+        status: false,
+        message: "User already exists",
+      });
+    }
+
+    const hash = await bcrypt.hash(password.toString().trim(), 12);
+
+    const user = await User.create({
+      name,
+      email: email.toLowerCase(),
+      phone,
+      password: hash,
+    });
+
+    console.log("✅ SIGNUP SUCCESS:", user.email);
+
+    return res.json({
+      status: true,
+      message: "Signup successful",
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+      },
+    });
+  } catch (err) {
+    console.error("💥 SIGNUP ERROR:", err);
+    return res.status(500).json({
+      status: false,
+      message: err.message,
+    });
+  }
+});
+
+// ------------------------------------------------------
+// POST /api/auth/login
+// ------------------------------------------------------
+router.post("/login", async (req, res) => {
+  try {
+    let { email, password } = req.body;
+
+    email = email?.toString().trim().toLowerCase().replace(/\s+/g, '');
+    const normalizedPassword = password?.toString().trim().replace(/\s+/g, '');
+
+    console.log("🔍 LOGIN EMAIL:", email);
+
+    const user = await User.findOne({
+      $or: [{ email }, { phone: email }],
+    }).select("name email phone password");
+
+    console.log("👤 USER FOUND:", user ? user.email : "NO USER");
+
+    if (!user || !user.password || !normalizedPassword) {
+      return res.status(400).json({
+        status: false,
+        message: "Invalid credentials",
+      });
+    }
+
+    const match = await bcrypt.compare(normalizedPassword, user.password);
+    console.log("✅ PASSWORD MATCH:", match);
+
+    if (!match) {
+      return res.status(400).json({
+        status: false,
+        message: "Invalid credentials",
+      });
+    }
+
+    const token = jwt.sign(
+      { id: user._id },
+      process.env.JWT_SECRET || "secret",
+      { expiresIn: "7d" }
+    );
+
+    console.log("🎉 LOGIN SUCCESS:", user.email);
+
+    return res.json({
+      status: true,
+      message: "Login successful",
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+      },
+    });
+  } catch (err) {
+    console.error("💥 LOGIN ERROR:", err);
+    return res.status(500).json({
+      status: false,
+      message: err.message,
+    });
+  }
+});
+
+// ------------------------------------------------------
+// 🔥 OTP ROUTES - FLUTTER COMPATIBLE!
+// ------------------------------------------------------
+router.post("/send-otp", async (req, res) => {
+  try {
+    const { type, value } = req.body;
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+    console.log(`📱 OTP GENERATED: ${otp} for ${value} (${type})`);
+
+    // Update user with OTP (email OR phone)
+    const updateResult = await User.updateOne(
+      { $or: [{ email: value }, { phone: value }] },
+      {
+        otp,
+        otpExpire: Date.now() + 5 * 60 * 1000, // 5 minutes
+        isOtpVerified: false,
+      }
+    );
+
+    if (updateResult.matchedCount === 0) {
+      return res.status(404).json({
+        status: false,
+        message: "User not found",
+      });
+    }
+
+    console.log(`✅ OTP SAVED for ${value} - Check console for OTP: ${otp}`);
+
+    return res.json({
+      status: true,
+      message: "OTP sent successfully (check console)",
+    });
+  } catch (err) {
+    console.error("💥 SEND OTP ERROR:", err);
+    return res.status(500).json({
+      status: false,
+      message: err.message,
+    });
+  }
+});
+
+// ------------------------------------------------------
+// POST /api/auth/verify-otp - FLUTTER COMPATIBLE!
+// ------------------------------------------------------
+router.post("/verify-otp", async (req, res) => {
+  try {
+    const { value, otp } = req.body; // Flutter se 'type' nahi bhej raha
+
+    console.log(`🔍 VERIFYING OTP: ${otp} for ${value}`);
+
+    const user = await User.findOne({
+      $or: [
+        { email: value, otp, otpExpire: { $gt: Date.now() }, isOtpVerified: false },
+        { phone: value, otp, otpExpire: { $gt: Date.now() }, isOtpVerified: false }
+      ]
+    });
+
+    if (!user) {
+      console.log("❌ INVALID/EXPIRED OTP");
+      return res.status(400).json({
+        status: false,
+        message: "Invalid or expired OTP",
+      });
+    }
+
+    user.isOtpVerified = true;
+    await user.save();
+
+    console.log("✅ OTP VERIFIED SUCCESSFULLY:", user.email || user.phone);
+
+    return res.json({
+      status: true,
+      message: "OTP verified successfully",
+    });
+  } catch (err) {
+    console.error("💥 VERIFY OTP ERROR:", err);
+    return res.status(500).json({
+      status: false,
+      message: err.message,
+    });
+  }
+});
+
+// ------------------------------------------------------
+// POST /api/auth/reset-password - FLUTTER COMPATIBLE!
+// ------------------------------------------------------
+router.post("/reset-password", async (req, res) => {
+  try {
+    const { value, password } = req.body; // Flutter se 'password' field
+
+    console.log(`🔄 RESET PASSWORD for ${value}`);
+
+    const user = await User.findOne({
+      $or: [
+        { email: value, isOtpVerified: true },
+        { phone: value, isOtpVerified: true }
+      ]
+    });
+
+    if (!user) {
+      return res.status(400).json({
+        status: false,
+        message: "Complete OTP verification first",
+      });
+    }
+
+    // Update password
+    user.password = await bcrypt.hash(password.toString().trim(), 12);
+    user.otp = null;
+    user.otpExpire = null;
+    user.isOtpVerified = false;
+    await user.save();
+
+    console.log("✅ PASSWORD RESET SUCCESS:", user.email || user.phone);
+
+    return res.json({
+      status: true,
+      message: "Password reset successful",
+    });
+  } catch (err) {
+    console.error("💥 RESET PASSWORD ERROR:", err);
+    return res.status(500).json({
+      status: false,
+      message: err.message,
+    });
+  }
+});
+
+// ------------------------------------------------------
+// 🔥 DEBUG ROUTES (KEEP FOR TESTING)
+// ------------------------------------------------------
+router.post("/debug-compare", async (req, res) => {
+  try {
+    const { email, testPassword } = req.body;
+    const user = await User.findOne({ email: email.toLowerCase() }).select('password');
+    if (!user) {
+      return res.json({ error: 'User not found', status: false });
+    }
+
+    const cleanPass = testPassword.toString().trim().replace(/\s+/g, '');
+    const match = await bcrypt.compare(cleanPass, user.password);
+
+    res.json({
+      status: true,
+      match,
+      success: match ? '✅ LOGIN WILL WORK!' : '❌ PASSWORD MISMATCH'
+    });
+  } catch (err) {
+    res.json({ error: err.message, status: false });
+  }
+});
+
+router.post("/force-reset", async (req, res) => {
+  try {
+    const { email, newPassword } = req.body;
+    const user = await User.findOne({ email: email.toLowerCase() });
+    if (!user) {
+      return res.json({ error: 'User not found', status: false });
+    }
+
+    const newHash = await bcrypt.hash(newPassword, 12);
+    user.password = newHash;
+    await user.save();
+
+    res.json({
+      status: true,
+      message: "Password force reset complete",
+    });
+  } catch (err) {
+    res.json({ error: err.message, status: false });
+  }
+});
+
+module.exports = router;

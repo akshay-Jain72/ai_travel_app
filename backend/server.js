@@ -1,142 +1,139 @@
-require("dotenv").config();
 const express = require("express");
-const cors = require("cors");
-const mongoose = require("mongoose");
+const router = express.Router();
+const multer = require("multer");
 const path = require("path");
+const csv = require("csv-parser");
 const fs = require("fs");
+const Itinerary = require("../models/Itinerary");
+const Traveler = require("../models/Traveler");
+const auth = require("../middleware/auth");
 
-// ✅ ALL ROUTES (Phase 4 COMPLETE!)
-const authRoutes = require("./routes/auth");
-const itineraryRoutes = require("./routes/itinerary");
-const chatbotRoutes = require("./routes/chatbot");
-const notificationsRoutes = require("./routes/notifications");
-const analyticsRoutes = require("./routes/analytics");
-
-const app = express();
-
-// ✅ CORS (Flutter Web + Mobile + Postman)
-app.use(
-  cors({
-    origin: true,
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-  })
-);
-
-// ✅ Body parsers (10MB files for CSV/PDF)
-app.use(express.json({ limit: "10mb" }));
-app.use(express.urlencoded({ extended: true, limit: "10mb" }));
-
-// 📂 Uploads folder (CSV/PDF files)
-const uploadsDir = path.join(__dirname, "uploads");
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-  console.log("📁 uploads/ folder created");
-}
-app.use("/uploads", express.static(uploadsDir));
-
-// ✅ STATIC FILES (Analytics Dashboard + Future assets)
-app.use(express.static('public'));
-
-// 🔥 HEALTH CHECK + API STATUS (Phase 4 Updated!)
-app.get("/", (req, res) => {
-  res.json({
-    message: "🚀 Akshay Travels Backend - ALL PHASES COMPLETE! ✅",
-    timestamp: new Date().toISOString(),
-    version: "v2.1 - FULLSTACK PRODUCTION READY",
-    routes: [
-      "/api/auth → Login/Signup/OTP",
-      "/api/itinerary → Upload/List/Add Travelers (CSV Parser)",
-      "/api/chatbot → AI Chat (Mock → OpenAI Ready)",
-      "/api/notifications → WhatsApp Sender (Twilio LIVE)",
-      "/api/analytics → 📊 Dashboard Stats (Phase 4)",
-      "/analytics.html → Web Analytics Dashboard"
-    ],
-    mongodb: mongoose.connection.readyState === 1 ? "✅ Connected" : "⏳ Connecting...",
-    features: {
-      auth: "✅ JWT + bcrypt",
-      upload: "✅ Multer + CSV Parser",
-      whatsapp: "✅ Twilio (Real + Mock)",
-      analytics: "✅ Real MongoDB counts"
-    },
-    uploads: `http://192.168.1.5:3000/uploads`,
-    flutter: `http://192.168.1.5:3000/api`,
-    postman: "Bearer token from /api/auth/login"
-  });
+// ✅ RENDER FIXED Storage!
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const dest = process.env.NODE_ENV === 'production' ? '/tmp/uploads/' : './uploads/';
+    if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true });
+    console.log(`📁 Saving to: ${dest}`);
+    cb(null, dest);
+  },
+  filename: (req, file, cb) => {
+    cb(null, `itinerary-${Date.now()}-${Math.random().toString(36).substr(2, 9)}${path.extname(file.originalname)}`);
+  }
 });
 
-// 🛣️ ALL API ROUTES (COMPLETE!)
-app.use("/api/auth", authRoutes);
-app.use("/api/itinerary", itineraryRoutes);
-app.use("/api/chatbot", chatbotRoutes);
-app.use("/api/notifications", notificationsRoutes);
-app.use("/api/analytics", analyticsRoutes);
-
-// 404 Handler (Professional)
-app.use("*", (req, res) => {
-  res.status(404).json({
-    error: "Route not found ❌",
-    available: [
-      "/api/auth",
-      "/api/itinerary",
-      "/api/chatbot",
-      "/api/notifications",
-      "/api/analytics",
-      "/analytics.html"
-    ],
-    docs: "http://192.168.1.5:3000/"
-  });
+const upload = multer({
+  storage,
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (['.pdf', '.csv', '.json'].includes(ext)) cb(null, true);
+    else cb(new Error("Only PDF, CSV, JSON allowed"));
+  }
 });
 
-// 🚀 MONGODB CONNECTION + SERVER START
-mongoose
-  .connect(process.env.MONGO_URL)
-  .then(() => {
-    console.log("✅ MongoDB Connected: ai_travel DB");
+// ✅ UPLOAD (Multer error handling!)
+router.post("/upload", auth, (req, res, next) => {
+  upload.single("file")(req, res, (err) => {
+    if (err) {
+      console.error('💥 MULTER ERROR:', err);
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({ status: false, message: 'File बहुत बड़ी है (10MB max)' });
+      }
+      return res.status(400).json({ status: false, message: err.message });
+    }
+    next();
+  });
+}, async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ status: false, message: "No file uploaded" });
 
-    const PORT = 3000;  // 👈 FIXED PORT 3000 (NO CONFLICT!)
-    const server = app.listen(PORT, '0.0.0.0', () => {
-      console.log(`\n🚀 Server LIVE: http://192.168.1.5:${PORT}`);
-      console.log(`📱 Flutter Mobile: http://192.168.1.5:${PORT}/api`);
-      console.log(`🌐 Flutter Web: http://localhost:${PORT}`);
-      console.log(`🔗 Health Check: http://192.168.1.5:${PORT}/`);
-      console.log(`📊 Analytics API: http://192.168.1.5:${PORT}/api/analytics`);
-      console.log(`📈 Web Dashboard: http://192.168.1.5:${PORT}/analytics.html`);
-      console.log(`📂 File Uploads: http://192.168.1.5:${PORT}/uploads`);
-      console.log(`✅ FEATURES LIVE:`);
-      console.log(`   • Auth (Login/Signup/OTP)`);
-      console.log(`   • CSV Parser + Timeline`);
-      console.log(`   • Traveler Management`);
-      console.log(`   • REAL WhatsApp (Twilio)`);
-      console.log(`   • AI Chat (Mock Ready)`);
-      console.log(`   • Analytics Dashboard`);
-      console.log(`\n🎉 AKSHAY TRAVELS - MOBILE READY! 🚀✈️📱`);
-    });
+    console.log('✅ File:', req.file.filename, req.file.size, 'bytes');
 
-    // 🛡️ Graceful shutdown
-    process.on('SIGINT', async () => {
-      console.log('\n👋 Graceful shutdown started...');
-      await mongoose.connection.close();
-      server.close(() => {
-        console.log('✅ Server stopped cleanly');
-        process.exit(0);
+    let days = [];
+    if (req.file.mimetype.includes("csv")) {
+      days = await new Promise((resolve, reject) => {
+        const results = [];
+        fs.createReadStream(req.file.path)
+          .pipe(csv())
+          .on("data", data => results.push(data))
+          .on("end", () => {
+            days = results.slice(0, 7).map((row, i) => ({
+              day: i + 1,
+              title: row.activity || row.title || `Day ${i + 1}`,
+              time: row.time || "09:00 AM",
+              location: row.location || "TBD",
+              description: row.description || "Details"
+            }));
+            resolve(days);
+          })
+          .on("error", reject);
       });
+    }
+
+    const itinerary = new Itinerary({
+      title: req.body.title,
+      userId: req.user.id,
+      fileUrl: `/uploads/${req.file.filename}`,
+      fileSize: req.file.size,
+      fileType: req.file.mimetype,
+      days,
+      travelers: [],
+      status: "draft"
     });
 
-    process.on('SIGTERM', async () => {
-      console.log('\n👋 SIGTERM received...');
-      await mongoose.connection.close();
-      server.close(() => {
-        console.log('✅ Server stopped');
-        process.exit(0);
-      });
+    await itinerary.save();
+    console.log(`✅ UPLOADED: ${req.body.title}`);
+
+    res.json({
+      status: true,
+      message: `Itinerary uploaded! ${days.length ? `(${days.length} days)` : ''}`,
+      item: {
+        id: itinerary._id,
+        title: itinerary.title,
+        days: days,
+        fileUrl: itinerary.fileUrl
+      }
     });
-  })
-  .catch((err) => {
-    console.error("❌ MongoDB Connection FAILED:", err.message);
-    console.log("💡 Fix: Check .env → MONGO_URL=mongodb://127.0.0.1:27017/ai_travel");
-    process.exit(1);
+  } catch (error) {
+    console.error("💥 Upload error:", error);
+    res.status(500).json({ status: false, message: error.message });
+  }
+});
+
+// ✅ GET Itineraries
+router.get("/", auth, async (req, res) => {
+  const itineraries = await Itinerary.find({ userId: req.user.id })
+    .sort({ createdAt: -1 })
+    .limit(50);
+  res.json({ status: true, data: itineraries, count: itineraries.length });
+});
+
+// ✅ GET Single
+router.get("/:id", auth, async (req, res) => {
+  const itinerary = await Itinerary.findOne({ _id: req.params.id, userId: req.user.id }).populate("travelers");
+  if (!itinerary) return res.status(404).json({ status: false, message: "Not found" });
+  res.json({ status: true, data: itinerary });
+});
+
+// ✅ Add Traveler
+router.post("/:id/travelers/add", auth, async (req, res) => {
+  const { id } = req.params;
+  const { name, phone, email, language = "en", isPrimary = false } = req.body;
+
+  const traveler = new Traveler({
+    itineraryId: id,
+    userId: req.user.id,
+    name: name.trim(),
+    phone: phone.trim(),
+    email: email?.trim() || null,
+    language,
+    isPrimary
   });
 
-module.exports = app;
+  await traveler.save();
+  await Itinerary.findByIdAndUpdate(id, { $push: { travelers: traveler._id }, $inc: { travelerCount: 1 } });
+
+  res.json({ status: true, message: "Traveler added!", data: traveler });
+});
+
+module.exports = router;

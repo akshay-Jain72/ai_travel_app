@@ -5,9 +5,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 
 class ApiService {
-  static String get baseUrl => kIsWeb
-      ? "http://localhost:3000/api"
-      : "http://192.168.37.127:3000/api";  // ✅ 3000 SAHI
+  // ✅ PRODUCTION LIVE SERVER URL (Mobile + Web दोनों के लिए!)
+  static String get baseUrl => "https://ai-travel-app-alc2.onrender.com/api";
 
   // ✅ SAFE PRINT HELPER
   static String _safeSubstring(String? text, [int maxLength = 100]) {

@@ -46,7 +46,7 @@ const itinerarySchema = new mongoose.Schema({
   dates: String,
   budget: String,
   travelers: String,
-  title: { type: String, required: true },  // ✅ Title required fix
+  title: { type: String, required: true },
   fileUrl: String,
   uploadedAt: { type: Date, default: Date.now }
 });
@@ -81,7 +81,6 @@ const auth = (req, res, next) => {
   try {
     const token = req.header('Authorization')?.replace('Bearer ', '');
     if (!token) return res.status(401).json({ error: 'No token' });
-
     const decoded = jwt.verify(token, JWT_SECRET);
     req.user = decoded;
     next();
@@ -90,17 +89,16 @@ const auth = (req, res, next) => {
   }
 };
 
-// Routes
+// 🔥 BOTH ROUTE FORMATS (Flutter + Old compatibility)
 app.get('/', (req, res) => res.json({ message: '🚀 Akshay Travels LIVE!' }));
 
-// 1. Register
+// 1. Register - OLD
 app.post('/api/register', async (req, res) => {
   try {
     const { email, password, name, phone } = req.body;
     const hashedPassword = await bcrypt.hash(password, 10);
     const user = new User({ email: email.toLowerCase(), password: hashedPassword, name, phone });
     await user.save();
-
     const token = jwt.sign({ userId: user._id }, JWT_SECRET, { expiresIn: '7d' });
     res.json({ token, user: { id: user._id, email: user.email, name: user.name } });
   } catch (error) {
@@ -108,16 +106,28 @@ app.post('/api/register', async (req, res) => {
   }
 });
 
-// 2. Login
+// 1. Register - NEW (Flutter /api/auth/register)
+app.post('/api/auth/register', async (req, res) => {
+  try {
+    const { email, password, name, phone } = req.body;
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const user = new User({ email: email.toLowerCase(), password: hashedPassword, name, phone });
+    await user.save();
+    const token = jwt.sign({ userId: user._id }, JWT_SECRET, { expiresIn: '7d' });
+    res.json({ token, user: { id: user._id, email: user.email, name: user.name } });
+  } catch (error) {
+    res.status(400).json({ error: 'User already exists' });
+  }
+});
+
+// 2. Login - OLD
 app.post('/api/login', async (req, res) => {
   try {
     const { email, password } = req.body;
     const user = await User.findOne({ email: email.toLowerCase() });
-
     if (!user || !await bcrypt.compare(password, user.password)) {
       return res.status(400).json({ error: 'Invalid credentials' });
     }
-
     const token = jwt.sign({ userId: user._id }, JWT_SECRET, { expiresIn: '7d' });
     res.json({ token, user: { id: user._id, email: user.email, name: user.name } });
   } catch (error) {
@@ -125,11 +135,27 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
-// 3. CSV Upload
-app.post('/api/upload-itinerary', auth, upload.single('csvFile'), async (req, res) => {
+// 2. Login - NEW (Flutter /api/auth/login) ✅ FIXED!
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    const user = await User.findOne({ email: email.toLowerCase() });
+    if (!user || !await bcrypt.compare(password, user.password)) {
+      return res.status(400).json({ error: 'Invalid credentials' });
+    }
+    const token = jwt.sign({ userId: user._id }, JWT_SECRET, { expiresIn: '7d' });
+    res.json({ token, user: { id: user._id, email: user.email, name: user.name } });
+  } catch (error) {
+    res.status(400).json({ error: 'Invalid credentials' });
+  }
+});
+
+// 3. CSV Upload - Flutter compatible
+app.post('/api/itinerary/upload', auth, upload.single('file'), async (req, res) => {
   try {
     console.log('📤 REQ.BODY:', req.body);
     console.log('👤 USER.ID:', req.user.userId);
+    console.log('📁 FILE:', req.file?.filename);
 
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
@@ -149,7 +175,7 @@ app.post('/api/upload-itinerary', auth, upload.single('csvFile'), async (req, re
     for (let row of results.slice(0, 5)) {
       const itinerary = new Itinerary({
         userId: req.user.userId,
-        userEmail: req.user.email,
+        userEmail: req.user.email || 'unknown',
         title,
         fileUrl: `/uploads/${req.file.filename}`,
         destination: row.destination || row.Destination || '',
@@ -161,46 +187,43 @@ app.post('/api/upload-itinerary', auth, upload.single('csvFile'), async (req, re
     }
 
     fs.unlinkSync(req.file.path);
-    res.json({ success: true, count: results.length, title });
+    res.json({
+      status: true,
+      success: true,
+      count: results.length,
+      title,
+      message: `Itinerary "${title}" uploaded!`
+    });
   } catch (error) {
     console.error('Upload Error:', error);
     res.status(500).json({ error: error.message });
   }
 });
 
-// 4. Get Itineraries
+// 4. Get Itineraries - Both formats
 app.get('/api/itineraries', auth, async (req, res) => {
   const itineraries = await Itinerary.find({ userId: req.user.userId })
-    .sort({ uploadedAt: -1 })
-    .limit(20);
-  res.json(itineraries);
+    .sort({ uploadedAt: -1 }).limit(20);
+  res.json({ status: true, data: itineraries, count: itineraries.length });
+});
+
+app.get('/api/itinerary', auth, async (req, res) => {
+  const itineraries = await Itinerary.find({ userId: req.user.userId })
+    .sort({ uploadedAt: -1 }).limit(20);
+  res.json({ status: true, data: itineraries, count: itineraries.length });
 });
 
 // 5. AI Chat
 app.post('/api/ai-chat', async (req, res) => {
   const { message, destination } = req.body;
   let response = 'Great choice! ';
-
   if (destination.toLowerCase().includes('udaipur')) {
     response += 'Udaipur के लिए Lake Pichola, City Palace must-visit हैं। December में perfect weather!';
   } else {
     response += `${destination} amazing destination है! Local food enjoy करो।`;
   }
-
   res.json({ reply: response });
 });
-
-// WhatsApp Notification
-const sendWhatsAppNotification = (phone, itinerary) => {
-  if (!process.env.TWILIO_ACCOUNT_SID) return;
-
-  const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
-  client.messages.create({
-    from: process.env.TWILIO_WHATSAPP_FROM,
-    to: `whatsapp:${phone}`,
-    body: `✈️ नया Itinerary!\n${itinerary.destination} | ₹${itinerary.budget}`
-  }).catch(console.error);
-};
 
 // Test
 app.get('/api/test', (req, res) => res.json({ status: 'Server LIVE ✅' }));

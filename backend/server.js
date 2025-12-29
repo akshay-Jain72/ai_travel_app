@@ -76,13 +76,18 @@ const upload = multer({
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-key';
 
-// Middleware Auth
+// 🔥 FIXED Auth Middleware
 const auth = (req, res, next) => {
   try {
     const token = req.header('Authorization')?.replace('Bearer ', '');
     if (!token) return res.status(401).json({ error: 'No token' });
+
     const decoded = jwt.verify(token, JWT_SECRET);
-    req.user = decoded;
+    // ✅ FIXED: userId properly set
+    req.user = {
+      id: decoded.userId,
+      userId: decoded.userId
+    };
     next();
   } catch (error) {
     res.status(401).json({ error: 'Invalid token' });
@@ -106,7 +111,7 @@ app.post('/api/register', async (req, res) => {
   }
 });
 
-// 1. Register - NEW (Flutter /api/auth/register)
+// 1. Register - NEW (Flutter)
 app.post('/api/auth/register', async (req, res) => {
   try {
     const { email, password, name, phone } = req.body;
@@ -135,26 +140,38 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
-// 2. Login - NEW (Flutter /api/auth/login) ✅ FIXED!
+// 2. Login - NEW (Flutter) ✅ FIXED!
 app.post('/api/auth/login', async (req, res) => {
   try {
+    console.log('🔐 LOGIN ATTEMPT:', req.body.email);
     const { email, password } = req.body;
     const user = await User.findOne({ email: email.toLowerCase() });
-    if (!user || !await bcrypt.compare(password, user.password)) {
+
+    if (!user) {
+      console.log('❌ User not found');
       return res.status(400).json({ error: 'Invalid credentials' });
     }
+
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      console.log('❌ Password mismatch');
+      return res.status(400).json({ error: 'Invalid credentials' });
+    }
+
     const token = jwt.sign({ userId: user._id }, JWT_SECRET, { expiresIn: '7d' });
+    console.log('✅ LOGIN SUCCESS:', user.email);
     res.json({ token, user: { id: user._id, email: user.email, name: user.name } });
   } catch (error) {
+    console.error('💥 Login error:', error);
     res.status(400).json({ error: 'Invalid credentials' });
   }
 });
 
-// 3. CSV Upload - Flutter compatible
+// 3. CSV Upload - FIXED ✅
 app.post('/api/itinerary/upload', auth, upload.single('file'), async (req, res) => {
   try {
     console.log('📤 REQ.BODY:', req.body);
-    console.log('👤 USER.ID:', req.user.userId);
+    console.log('👤 USER.ID:', req.user.userId);  // ✅ Now working!
     console.log('📁 FILE:', req.file?.filename);
 
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
@@ -167,14 +184,14 @@ app.post('/api/itinerary/upload', auth, upload.single('file'), async (req, res) 
         fs.createReadStream(req.file.path)
           .pipe(csv())
           .on('data', (data) => results.push(data))
-          .on('end', resolve)
+          .on('end', () => resolve(results))
           .on('error', reject);
       });
     }
 
     for (let row of results.slice(0, 5)) {
       const itinerary = new Itinerary({
-        userId: req.user.userId,
+        userId: req.user.userId,  // ✅ Fixed!
         userEmail: req.user.email || 'unknown',
         title,
         fileUrl: `/uploads/${req.file.filename}`,
@@ -200,7 +217,7 @@ app.post('/api/itinerary/upload', auth, upload.single('file'), async (req, res) 
   }
 });
 
-// 4. Get Itineraries - Both formats
+// 4. Get Itineraries
 app.get('/api/itineraries', auth, async (req, res) => {
   const itineraries = await Itinerary.find({ userId: req.user.userId })
     .sort({ uploadedAt: -1 }).limit(20);
@@ -217,10 +234,10 @@ app.get('/api/itinerary', auth, async (req, res) => {
 app.post('/api/ai-chat', async (req, res) => {
   const { message, destination } = req.body;
   let response = 'Great choice! ';
-  if (destination.toLowerCase().includes('udaipur')) {
+  if (destination?.toLowerCase().includes('udaipur')) {
     response += 'Udaipur के लिए Lake Pichola, City Palace must-visit हैं। December में perfect weather!';
   } else {
-    response += `${destination} amazing destination है! Local food enjoy करो।`;
+    response += `${destination || 'your destination'} amazing destination है! Local food enjoy करो।`;
   }
   res.json({ reply: response });
 });

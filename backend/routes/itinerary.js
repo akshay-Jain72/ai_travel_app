@@ -9,7 +9,7 @@ const Itinerary = require("../models/Itinerary");
 const Traveler = require("../models/Traveler");
 const auth = require("../middleware/auth");
 
-// ✅ RENDER + LOCAL Storage
+// ✅ Multer Storage (SAME)
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     const dest = process.env.NODE_ENV === 'production' ? '/tmp/uploads/' : './uploads/';
@@ -32,19 +32,8 @@ const upload = multer({
   }
 });
 
-// 🔥 FIXED UPLOAD - TITLE + USERID CRITICAL!
-router.post("/upload", auth, (req, res, next) => {
-  upload.single("file")(req, res, (err) => {
-    if (err) {
-      console.error('💥 MULTER ERROR:', err);
-      if (err.code === 'LIMIT_FILE_SIZE') {
-        return res.status(400).json({ status: false, message: 'File बहुत बड़ी है (10MB max)' });
-      }
-      return res.status(400).json({ status: false, message: err.message });
-    }
-    next();
-  });
-}, async (req, res) => {
+// 🔥 FIXED UPLOAD - SIMPLIFIED (NO CRASH!)
+router.post("/upload", auth, upload.single("file"), async (req, res) => {
   try {
     console.log('📤 REQ.BODY:', req.body);
     console.log('👤 USER.ID:', req.user.id);
@@ -54,7 +43,8 @@ router.post("/upload", auth, (req, res, next) => {
       return res.status(400).json({ status: false, message: "No file uploaded" });
     }
 
-    const title = req.body.title?.trim() || `Trip ${new Date().toLocaleDateString()}`;
+    const { title, destination, startDate, endDate, travelerType, description } = req.body;
+    const cleanTitle = title?.trim() || `Trip ${new Date().toLocaleDateString()}`;
 
     let days = [];
     if (req.file.mimetype.includes("csv")) {
@@ -77,11 +67,15 @@ router.post("/upload", auth, (req, res, next) => {
       });
     }
 
-    // ✅ Delete file after processing
     fs.unlinkSync(req.file.path);
 
     const itinerary = new Itinerary({
-      title,
+      title: cleanTitle,
+      destination: destination || "Multiple Cities",
+      startDate: startDate || null,
+      endDate: endDate || null,
+      travelerType: travelerType || "Solo",
+      description: description || "",
       userId: req.user.id,
       fileUrl: `/uploads/${req.file.filename}`,
       fileSize: req.file.size,
@@ -92,16 +86,17 @@ router.post("/upload", auth, (req, res, next) => {
     });
 
     await itinerary.save();
-    console.log(`✅ UPLOADED: ${title} by user ${req.user.id}`);
+    console.log(`✅ UPLOADED: ${cleanTitle} by user ${req.user.id}`);
 
     res.json({
       status: true,
-      message: `Itinerary "${title}" uploaded! ${days.length ? `(${days.length} days)` : ''}`,
+      message: `Itinerary "${cleanTitle}" uploaded! ${days.length ? `(${days.length} days)` : ''}`,
       item: {
         id: itinerary._id,
-        title: itinerary.title,
-        days: days,
-        fileUrl: itinerary.fileUrl
+        title: cleanTitle,
+        destination: itinerary.destination,
+        travelerCount: 0,
+        days
       }
     });
   } catch (error) {
@@ -110,33 +105,65 @@ router.post("/upload", auth, (req, res, next) => {
   }
 });
 
-// ✅ GET Itineraries
+// 🔥 FIXED GET - REAL TRAVELER COUNT!
 router.get("/", auth, async (req, res) => {
-  const itineraries = await Itinerary.find({ userId: req.user.id })
-    .sort({ createdAt: -1 })
-    .limit(50);
-  res.json({ status: true, data: itineraries, count: itineraries.length });
+  try {
+    const itineraries = await Itinerary.find({ userId: req.user.id })
+      .populate('travelers', 'name phone')
+      .sort({ createdAt: -1 })
+      .limit(50)
+      .lean();
+
+    const itinerariesWithCount = itineraries.map(itinerary => ({
+      ...itinerary,
+      travelerCount: itinerary.travelers?.length || 0,
+      destination: itinerary.destination || 'Multiple Cities',
+      startDate: itinerary.startDate || null,
+      endDate: itinerary.endDate || null,
+    }));
+
+    console.log(`✅ ${itinerariesWithCount.length} itineraries with REAL traveler counts`);
+
+    res.json({
+      status: true,
+      data: itinerariesWithCount,
+      count: itinerariesWithCount.length
+    });
+  } catch (error) {
+    console.error('💥 Get Itineraries Error:', error);
+    res.status(500).json({ status: false, message: error.message });
+  }
 });
 
 // ✅ GET Single
 router.get("/:id", auth, async (req, res) => {
-  const itinerary = await Itinerary.findOne({
-    _id: req.params.id,
-    userId: req.user.id
-  }).populate("travelers");
-  if (!itinerary) return res.status(404).json({ status: false, message: "Not found" });
-  res.json({ status: true, data: itinerary });
+  try {
+    const itinerary = await Itinerary.findOne({
+      _id: req.params.id,
+      userId: req.user.id
+    }).populate("travelers", "name phone email");
+
+    if (!itinerary) return res.status(404).json({ status: false, message: "Not found" });
+
+    const itineraryWithCount = {
+      ...itinerary.toObject(),
+      travelerCount: itinerary.travelers?.length || 0
+    };
+
+    res.json({ status: true, data: itineraryWithCount });
+  } catch (error) {
+    console.error('💥 Get Single Error:', error);
+    res.status(500).json({ status: false, message: error.message });
+  }
 });
 
-// 🔥 ADD TRAVELER ROUTE - 404 FIX!
+// ✅ ADD TRAVELER
 router.post('/:itineraryId/travelers/add', auth, async (req, res) => {
   try {
     console.log('🧑‍🤝‍🧑 ADD TRAVELER:', req.body);
-    console.log('👤 USER.ID:', req.user.id);
 
     const { itineraryId, name, phone, email, language, isPrimary } = req.body;
 
-    // ✅ Verify itinerary belongs to user
     const itinerary = await Itinerary.findOne({
       _id: itineraryId,
       userId: req.user.id
@@ -145,7 +172,6 @@ router.post('/:itineraryId/travelers/add', auth, async (req, res) => {
       return res.status(404).json({ status: false, message: 'Itinerary not found' });
     }
 
-    // ✅ Create traveler
     const traveler = new Traveler({
       itineraryId,
       userId: req.user.id,
@@ -157,7 +183,6 @@ router.post('/:itineraryId/travelers/add', auth, async (req, res) => {
     });
     await traveler.save();
 
-    // ✅ Link to itinerary
     itinerary.travelers.push(traveler._id);
     await itinerary.save();
 
@@ -203,7 +228,6 @@ router.delete('/:itineraryId/travelers/:travelerId', auth, async (req, res) => {
   try {
     const { itineraryId, travelerId } = req.params;
 
-    // ✅ Verify ownership
     const traveler = await Traveler.findOne({
       _id: travelerId,
       itineraryId,
@@ -214,10 +238,7 @@ router.delete('/:itineraryId/travelers/:travelerId', auth, async (req, res) => {
       return res.status(404).json({ status: false, message: 'Traveler not found' });
     }
 
-    // ✅ Remove from Traveler collection
     await Traveler.deleteOne({ _id: travelerId });
-
-    // ✅ Remove from itinerary travelers array
     await Itinerary.updateOne(
       { _id: itineraryId, userId: req.user.id },
       { $pull: { travelers: travelerId } }

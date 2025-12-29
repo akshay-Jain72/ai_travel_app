@@ -3,6 +3,18 @@ const router = express.Router();
 const User = require("../models/User");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const twilio = require('twilio'); // npm i twilio
+const nodemailer = require('nodemailer'); // npm i nodemailer
+
+// 🔥 Twilio + Nodemailer Setup
+const twilioClient = twilio(process.env.TWILIO_SID, process.env.TWILIO_TOKEN);
+const transporter = nodemailer.createTransporter({
+  service: 'gmail',
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS
+  }
+});
 
 // ------------------------------------------------------
 // POST /api/auth/signup
@@ -130,7 +142,7 @@ router.post("/login", async (req, res) => {
 });
 
 // ------------------------------------------------------
-// 🔥 OTP ROUTES - FLUTTER COMPATIBLE!
+// 🔥 OTP ROUTES - REAL SMS/EMAIL भेजेगा!
 // ------------------------------------------------------
 router.post("/send-otp", async (req, res) => {
   try {
@@ -139,7 +151,37 @@ router.post("/send-otp", async (req, res) => {
 
     console.log(`📱 OTP GENERATED: ${otp} for ${value} (${type})`);
 
-    // Update user with OTP (email OR phone)
+    // 🔥 REAL SMS/Email भेजो!
+    if (type === 'phone') {
+      // ✅ Twilio SMS
+      await twilioClient.messages.create({
+        body: `Akshay Travels OTP: ${otp}\nValid for 5 minutes only.`,
+        from: process.env.TWILIO_PHONE, // +14155238886
+        to: value
+      });
+      console.log(`✅ SMS SENT to ${value}: ${otp}`);
+    } else {
+      // ✅ Email via Nodemailer
+      await transporter.sendMail({
+        from: `"Akshay Travels" <${process.env.EMAIL_USER}>`,
+        to: value,
+        subject: 'Akshay Travels - Your OTP Code',
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #2563eb;">Your OTP Code</h2>
+            <div style="background: linear-gradient(135deg, #2563eb, #1d4ed8); color: white; padding: 20px; border-radius: 12px; text-align: center;">
+              <h1 style="margin: 0; font-size: 48px; font-weight: bold;">${otp}</h1>
+            </div>
+            <p style="color: #666; margin-top: 20px;">This OTP is valid for <strong>5 minutes</strong> only.</p>
+            <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+            <p style="color: #999; font-size: 14px;">Akshay Travels Team</p>
+          </div>
+        `
+      });
+      console.log(`✅ EMAIL SENT to ${value}: ${otp}`);
+    }
+
+    // DB में save (तुम्हारा original code)
     const updateResult = await User.updateOne(
       { $or: [{ email: value }, { phone: value }] },
       {
@@ -156,11 +198,10 @@ router.post("/send-otp", async (req, res) => {
       });
     }
 
-    console.log(`✅ OTP SAVED for ${value} - Check console for OTP: ${otp}`);
-
+    console.log(`✅ OTP SAVED + SENT for ${value}`);
     return res.json({
       status: true,
-      message: "OTP sent successfully (check console)",
+      message: `${type === 'phone' ? 'SMS' : 'Email'} OTP sent successfully!`,
     });
   } catch (err) {
     console.error("💥 SEND OTP ERROR:", err);
@@ -172,11 +213,11 @@ router.post("/send-otp", async (req, res) => {
 });
 
 // ------------------------------------------------------
-// POST /api/auth/verify-otp - FLUTTER COMPATIBLE!
+// POST /api/auth/verify-otp
 // ------------------------------------------------------
 router.post("/verify-otp", async (req, res) => {
   try {
-    const { value, otp } = req.body; // Flutter se 'type' nahi bhej raha
+    const { value, otp } = req.body;
 
     console.log(`🔍 VERIFYING OTP: ${otp} for ${value}`);
 
@@ -214,11 +255,11 @@ router.post("/verify-otp", async (req, res) => {
 });
 
 // ------------------------------------------------------
-// POST /api/auth/reset-password - FLUTTER COMPATIBLE!
+// POST /api/auth/reset-password
 // ------------------------------------------------------
 router.post("/reset-password", async (req, res) => {
   try {
-    const { value, password } = req.body; // Flutter se 'password' field
+    const { value, password } = req.body;
 
     console.log(`🔄 RESET PASSWORD for ${value}`);
 
@@ -236,7 +277,6 @@ router.post("/reset-password", async (req, res) => {
       });
     }
 
-    // Update password
     user.password = await bcrypt.hash(password.toString().trim(), 12);
     user.otp = null;
     user.otpExpire = null;
@@ -259,7 +299,7 @@ router.post("/reset-password", async (req, res) => {
 });
 
 // ------------------------------------------------------
-// 🔥 DEBUG ROUTES (KEEP FOR TESTING)
+// DEBUG ROUTES (KEEP FOR TESTING)
 // ------------------------------------------------------
 router.post("/debug-compare", async (req, res) => {
   try {

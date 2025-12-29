@@ -21,14 +21,20 @@ mongoose.connect(process.env.MONGODB_URI || process.env.MONGO_URL)
   .then(() => console.log('✅ MongoDB Connected'))
   .catch(err => console.error('❌ MongoDB Error:', err));
 
-// 🔥 ROUTES - Perfect Structure!
-app.use("/api/auth", require("./routes/auth"));           // तुम्हारा auth.js (signup/login/otp)
-app.use("/api/itinerary", require("./routes/itinerary")); // itinerary upload/list
+// 🔥 ROUTES - COMPLETE STRUCTURE!
+app.use("/api/auth", require("./routes/auth"));                // Login/Signup/OTP
+app.use("/api/itinerary", require("./routes/itinerary"));     // Upload/List/Travelers
+app.use("/api/analytics", require("./routes/analytics"));     // ✅ ANALYTICS ADDED!
 
 // Health check
 app.get('/', (req, res) => res.json({
   message: '🚀 Akshay Travels LIVE!',
-  endpoints: ['/api/auth/login', '/api/itinerary/upload']
+  endpoints: [
+    '/api/auth/login',
+    '/api/itinerary/upload',
+    '/api/itinerary/:id/travelers/add',  // ✅ New!
+    '/api/analytics'                     // ✅ New!
+  ]
 }));
 
 // Test endpoint
@@ -43,4 +49,6 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`✅ Render LIVE!`);
   console.log(`📱 Auth: /api/auth/login`);
   console.log(`📁 Upload: /api/itinerary/upload`);
+  console.log(`📊 Analytics: /api/analytics`);      // ✅ New!
+  console.log(`🧑‍🤝‍🧑 Travelers: /api/itinerary/:id/travelers/add`);
 });

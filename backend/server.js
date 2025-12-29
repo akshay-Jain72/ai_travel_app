@@ -1,14 +1,9 @@
 require("dotenv").config();
-const express = require('express');
-const mongoose = require('mongoose');
-const cors = require('cors');
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
-const multer = require('multer');
-const csv = require('csv-parser');
-const fs = require('fs');
-const twilio = require('twilio');
-const path = require('path');
+const express = require("express");
+const cors = require("cors");
+const mongoose = require("mongoose");
+const path = require("path");
+const fs = require("fs");
 
 const app = express();
 
@@ -26,230 +21,26 @@ mongoose.connect(process.env.MONGODB_URI || process.env.MONGO_URL)
   .then(() => console.log('✅ MongoDB Connected'))
   .catch(err => console.error('❌ MongoDB Error:', err));
 
-// User Schema
-const userSchema = new mongoose.Schema({
-  email: { type: String, required: true, unique: true },
-  password: { type: String, required: true },
-  name: String,
-  phone: String
-});
-const User = mongoose.model('User', userSchema);
+// 🔥 ROUTES - Perfect Structure!
+app.use("/api/auth", require("./routes/auth"));           // तुम्हारा auth.js (signup/login/otp)
+app.use("/api/itinerary", require("./routes/itinerary")); // itinerary upload/list
 
-// Itinerary Schema
-const itinerarySchema = new mongoose.Schema({
-  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  userEmail: String,
-  name: String,
-  email: String,
-  phone: String,
-  destination: String,
-  dates: String,
-  budget: String,
-  travelers: String,
-  title: { type: String, required: true },
-  fileUrl: String,
-  uploadedAt: { type: Date, default: Date.now }
-});
-const Itinerary = mongoose.model('Itinerary', itinerarySchema);
+// Health check
+app.get('/', (req, res) => res.json({
+  message: '🚀 Akshay Travels LIVE!',
+  endpoints: ['/api/auth/login', '/api/itinerary/upload']
+}));
 
-// ✅ Render Multer Storage
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const dest = process.env.NODE_ENV === 'production' ? '/tmp/uploads/' : 'uploads/';
-    if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true });
-    console.log(`📁 Saving to: ${dest}`);
-    cb(null, dest);
-  },
-  filename: (req, file, cb) => {
-    cb(null, `itinerary-${Date.now()}-${Math.random().toString(36).substr(2, 9)}${path.extname(file.originalname)}`);
-  }
-});
-const upload = multer({
-  storage,
-  limits: { fileSize: 10 * 1024 * 1024 },
-  fileFilter: (req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    if (['.pdf', '.csv', '.json'].includes(ext)) cb(null, true);
-    else cb(new Error("Only PDF, CSV, JSON allowed"));
-  }
-});
-
-const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-key';
-
-// 🔥 FIXED Auth Middleware
-const auth = (req, res, next) => {
-  try {
-    const token = req.header('Authorization')?.replace('Bearer ', '');
-    if (!token) return res.status(401).json({ error: 'No token' });
-
-    const decoded = jwt.verify(token, JWT_SECRET);
-    // ✅ FIXED: userId properly set
-    req.user = {
-      id: decoded.userId,
-      userId: decoded.userId
-    };
-    next();
-  } catch (error) {
-    res.status(401).json({ error: 'Invalid token' });
-  }
-};
-
-// 🔥 BOTH ROUTE FORMATS (Flutter + Old compatibility)
-app.get('/', (req, res) => res.json({ message: '🚀 Akshay Travels LIVE!' }));
-
-// 1. Register - OLD
-app.post('/api/register', async (req, res) => {
-  try {
-    const { email, password, name, phone } = req.body;
-    const hashedPassword = await bcrypt.hash(password, 10);
-    const user = new User({ email: email.toLowerCase(), password: hashedPassword, name, phone });
-    await user.save();
-    const token = jwt.sign({ userId: user._id }, JWT_SECRET, { expiresIn: '7d' });
-    res.json({ token, user: { id: user._id, email: user.email, name: user.name } });
-  } catch (error) {
-    res.status(400).json({ error: 'User already exists' });
-  }
-});
-
-// 1. Register - NEW (Flutter)
-app.post('/api/auth/register', async (req, res) => {
-  try {
-    const { email, password, name, phone } = req.body;
-    const hashedPassword = await bcrypt.hash(password, 10);
-    const user = new User({ email: email.toLowerCase(), password: hashedPassword, name, phone });
-    await user.save();
-    const token = jwt.sign({ userId: user._id }, JWT_SECRET, { expiresIn: '7d' });
-    res.json({ token, user: { id: user._id, email: user.email, name: user.name } });
-  } catch (error) {
-    res.status(400).json({ error: 'User already exists' });
-  }
-});
-
-// 2. Login - OLD
-app.post('/api/login', async (req, res) => {
-  try {
-    const { email, password } = req.body;
-    const user = await User.findOne({ email: email.toLowerCase() });
-    if (!user || !await bcrypt.compare(password, user.password)) {
-      return res.status(400).json({ error: 'Invalid credentials' });
-    }
-    const token = jwt.sign({ userId: user._id }, JWT_SECRET, { expiresIn: '7d' });
-    res.json({ token, user: { id: user._id, email: user.email, name: user.name } });
-  } catch (error) {
-    res.status(400).json({ error: 'Invalid credentials' });
-  }
-});
-
-// 2. Login - NEW (Flutter) ✅ FIXED!
-app.post('/api/auth/login', async (req, res) => {
-  try {
-    console.log('🔐 LOGIN ATTEMPT:', req.body.email);
-    const { email, password } = req.body;
-    const user = await User.findOne({ email: email.toLowerCase() });
-
-    if (!user) {
-      console.log('❌ User not found');
-      return res.status(400).json({ error: 'Invalid credentials' });
-    }
-
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) {
-      console.log('❌ Password mismatch');
-      return res.status(400).json({ error: 'Invalid credentials' });
-    }
-
-    const token = jwt.sign({ userId: user._id }, JWT_SECRET, { expiresIn: '7d' });
-    console.log('✅ LOGIN SUCCESS:', user.email);
-    res.json({ token, user: { id: user._id, email: user.email, name: user.name } });
-  } catch (error) {
-    console.error('💥 Login error:', error);
-    res.status(400).json({ error: 'Invalid credentials' });
-  }
-});
-
-// 3. CSV Upload - FIXED ✅
-app.post('/api/itinerary/upload', auth, upload.single('file'), async (req, res) => {
-  try {
-    console.log('📤 REQ.BODY:', req.body);
-    console.log('👤 USER.ID:', req.user.userId);  // ✅ Now working!
-    console.log('📁 FILE:', req.file?.filename);
-
-    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
-
-    const title = req.body.title?.trim() || `Trip ${new Date().toLocaleDateString()}`;
-    const results = [];
-
-    if (req.file.mimetype.includes('csv')) {
-      await new Promise((resolve, reject) => {
-        fs.createReadStream(req.file.path)
-          .pipe(csv())
-          .on('data', (data) => results.push(data))
-          .on('end', () => resolve(results))
-          .on('error', reject);
-      });
-    }
-
-    for (let row of results.slice(0, 5)) {
-      const itinerary = new Itinerary({
-        userId: req.user.userId,  // ✅ Fixed!
-        userEmail: req.user.email || 'unknown',
-        title,
-        fileUrl: `/uploads/${req.file.filename}`,
-        destination: row.destination || row.Destination || '',
-        dates: row.dates || row.Dates || '',
-        budget: row.budget || row.Budget || '',
-        travelers: row.travelers || row.Travelers || ''
-      });
-      await itinerary.save();
-    }
-
-    fs.unlinkSync(req.file.path);
-    res.json({
-      status: true,
-      success: true,
-      count: results.length,
-      title,
-      message: `Itinerary "${title}" uploaded!`
-    });
-  } catch (error) {
-    console.error('Upload Error:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// 4. Get Itineraries
-app.get('/api/itineraries', auth, async (req, res) => {
-  const itineraries = await Itinerary.find({ userId: req.user.userId })
-    .sort({ uploadedAt: -1 }).limit(20);
-  res.json({ status: true, data: itineraries, count: itineraries.length });
-});
-
-app.get('/api/itinerary', auth, async (req, res) => {
-  const itineraries = await Itinerary.find({ userId: req.user.userId })
-    .sort({ uploadedAt: -1 }).limit(20);
-  res.json({ status: true, data: itineraries, count: itineraries.length });
-});
-
-// 5. AI Chat
-app.post('/api/ai-chat', async (req, res) => {
-  const { message, destination } = req.body;
-  let response = 'Great choice! ';
-  if (destination?.toLowerCase().includes('udaipur')) {
-    response += 'Udaipur के लिए Lake Pichola, City Palace must-visit हैं। December में perfect weather!';
-  } else {
-    response += `${destination || 'your destination'} amazing destination है! Local food enjoy करो।`;
-  }
-  res.json({ reply: response });
-});
-
-// Test
+// Test endpoint
 app.get('/api/test', (req, res) => res.json({ status: 'Server LIVE ✅' }));
 
-// 404
+// 404 handler
 app.use('*', (req, res) => res.status(404).json({ error: 'Not found' }));
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server: ${PORT}`);
   console.log(`✅ Render LIVE!`);
+  console.log(`📱 Auth: /api/auth/login`);
+  console.log(`📁 Upload: /api/itinerary/upload`);
 });

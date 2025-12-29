@@ -3,12 +3,12 @@ const router = express.Router();
 const User = require("../models/User");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
-const twilio = require('twilio'); // npm i twilio
-const nodemailer = require('nodemailer'); // npm i nodemailer
+const twilio = require('twilio');
+const nodemailer = require('nodemailer');
 
-// 🔥 Twilio + Nodemailer Setup
-const twilioClient = twilio(process.env.TWILIO_SID, process.env.TWILIO_TOKEN);
-const transporter = nodemailer.createTransporter({
+// 🔥 FIXED Twilio + Nodemailer Setup
+const twilioClient = twilio(process.env.TWILIO_SID, process.env.TWILIO_AUTH_TOKEN);
+const transporter = nodemailer.createTransport({  // ✅ FIXED: createTransport
   service: 'gmail',
   auth: {
     user: process.env.EMAIL_USER,
@@ -153,10 +153,10 @@ router.post("/send-otp", async (req, res) => {
 
     // 🔥 REAL SMS/Email भेजो!
     if (type === 'phone') {
-      // ✅ Twilio SMS
+      // ✅ Twilio SMS/WhatsApp
       await twilioClient.messages.create({
         body: `Akshay Travels OTP: ${otp}\nValid for 5 minutes only.`,
-        from: process.env.TWILIO_PHONE, // +14155238886
+        from: process.env.TWILIO_PHONE || process.env.TWILIO_WHATSAPP_FROM,
         to: value
       });
       console.log(`✅ SMS SENT to ${value}: ${otp}`);
@@ -181,12 +181,12 @@ router.post("/send-otp", async (req, res) => {
       console.log(`✅ EMAIL SENT to ${value}: ${otp}`);
     }
 
-    // DB में save (तुम्हारा original code)
+    // DB में save
     const updateResult = await User.updateOne(
       { $or: [{ email: value }, { phone: value }] },
       {
         otp,
-        otpExpire: Date.now() + 5 * 60 * 1000, // 5 minutes
+        otpExpire: Date.now() + 5 * 60 * 1000,
         isOtpVerified: false,
       }
     );
@@ -299,7 +299,7 @@ router.post("/reset-password", async (req, res) => {
 });
 
 // ------------------------------------------------------
-// DEBUG ROUTES (KEEP FOR TESTING)
+// DEBUG ROUTES
 // ------------------------------------------------------
 router.post("/debug-compare", async (req, res) => {
   try {

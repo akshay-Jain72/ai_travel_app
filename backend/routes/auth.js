@@ -8,7 +8,7 @@ const nodemailer = require('nodemailer');
 
 // 🔥 FIXED Twilio + Nodemailer Setup
 const twilioClient = twilio(process.env.TWILIO_SID, process.env.TWILIO_AUTH_TOKEN);
-const transporter = nodemailer.createTransport({  // ✅ FIXED: createTransport
+const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
     user: process.env.EMAIL_USER,
@@ -142,7 +142,7 @@ router.post("/login", async (req, res) => {
 });
 
 // ------------------------------------------------------
-// 🔥 OTP ROUTES - REAL SMS/EMAIL भेजेगा!
+// 🔥 OTP ROUTES - WHATSAPP/SMS + EMAIL (100% FIXED!)
 // ------------------------------------------------------
 router.post("/send-otp", async (req, res) => {
   try {
@@ -151,15 +151,28 @@ router.post("/send-otp", async (req, res) => {
 
     console.log(`📱 OTP GENERATED: ${otp} for ${value} (${type})`);
 
-    // 🔥 REAL SMS/Email भेजो!
+    // 🔥 REAL SMS/WhatsApp/Email भेजो!
     if (type === 'phone') {
-      // ✅ Twilio SMS/WhatsApp
-      await twilioClient.messages.create({
-        body: `Akshay Travels OTP: ${otp}\nValid for 5 minutes only.`,
-        from: process.env.TWILIO_PHONE || process.env.TWILIO_WHATSAPP_FROM,
-        to: value
-      });
-      console.log(`✅ SMS SENT to ${value}: ${otp}`);
+      // ✅ WHATSAPP/SMS - FIXED FORMAT!
+      const fromNumber = process.env.TWILIO_PHONE || process.env.TWILIO_WHATSAPP_FROM;
+
+      // WhatsApp format check
+      if (fromNumber.includes('whatsapp:')) {
+        await twilioClient.messages.create({
+          body: `Akshay Travels OTP: ${otp}\nValid for 5 minutes only.`,
+          from: fromNumber,                    // whatsapp:+14155238886
+          to: `whatsapp:${value}`              // whatsapp:+917230953540 ✅
+        });
+      } else {
+        // Regular SMS
+        await twilioClient.messages.create({
+          body: `Akshay Travels OTP: ${otp}\nValid for 5 minutes only.`,
+          from: fromNumber,                    // +12526665975
+          to: value                            // +917230953540
+        });
+      }
+
+      console.log(`✅ SMS/WHATSAPP SENT to ${value}: ${otp}`);
     } else {
       // ✅ Email via Nodemailer
       await transporter.sendMail({
@@ -201,7 +214,7 @@ router.post("/send-otp", async (req, res) => {
     console.log(`✅ OTP SAVED + SENT for ${value}`);
     return res.json({
       status: true,
-      message: `${type === 'phone' ? 'SMS' : 'Email'} OTP sent successfully!`,
+      message: `${type === 'phone' ? 'SMS/WhatsApp' : 'Email'} OTP sent successfully!`,
     });
   } catch (err) {
     console.error("💥 SEND OTP ERROR:", err);

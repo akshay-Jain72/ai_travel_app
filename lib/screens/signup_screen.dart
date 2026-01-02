@@ -425,7 +425,7 @@ class _SignupScreenState extends State<SignupScreen> {
         decoration: InputDecoration(
           labelText: label,
           hintText: hintText,
-          floatingLabelBehavior: FloatingLabelBehavior.always,
+          floatingLabelBehavior: FloatingLabelBehavior.auto,
           labelStyle: TextStyle(
             color: colorScheme.onSurfaceVariant,
             fontSize: isTablet ? 16 : 14,

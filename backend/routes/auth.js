@@ -159,14 +159,14 @@ router.post("/send-otp", async (req, res) => {
       // WhatsApp format check
       if (fromNumber.includes('whatsapp:')) {
         await twilioClient.messages.create({
-          body: `Akshay Travels OTP: ${otp}\nValid for 5 minutes only.`,
+          body: `AI Travels OTP: ${otp}\nValid for 5 minutes only.`,
           from: fromNumber,                    // whatsapp:+14155238886
           to: `whatsapp:${value}`              // whatsapp:+917230953540 ✅
         });
       } else {
         // Regular SMS
         await twilioClient.messages.create({
-          body: `Akshay Travels OTP: ${otp}\nValid for 5 minutes only.`,
+          body: `AI Travels OTP: ${otp}\nValid for 5 minutes only.`,
           from: fromNumber,                    // +12526665975
           to: value                            // +917230953540
         });
@@ -176,9 +176,9 @@ router.post("/send-otp", async (req, res) => {
     } else {
       // ✅ Email via Nodemailer
       await transporter.sendMail({
-        from: `"Akshay Travels" <${process.env.EMAIL_USER}>`,
+        from: `"AI Travels" <${process.env.EMAIL_USER}>`,
         to: value,
-        subject: 'Akshay Travels - Your OTP Code',
+        subject: 'AI Travels - Your OTP Code',
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
             <h2 style="color: #2563eb;">Your OTP Code</h2>

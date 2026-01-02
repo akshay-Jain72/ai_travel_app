@@ -11,7 +11,8 @@ class SignupScreen extends StatefulWidget {
 class _SignupScreenState extends State<SignupScreen> {
   final nameController = TextEditingController();
   final emailController = TextEditingController();
-  final phoneController = TextEditingController();
+  // ✅ PHONE पहले से +91 के साथ initialize
+  final phoneController = TextEditingController(text: '+91 ');
   final passwordController = TextEditingController();
   bool loading = false;
 
@@ -21,13 +22,14 @@ class _SignupScreenState extends State<SignupScreen> {
     try {
       final name = nameController.text.trim();
       final email = emailController.text.trim().toLowerCase();
-      final phone = phoneController.text.trim();
+      // ✅ हमेशा +91 के साथ guaranteed
+      final phone = phoneController.text.trim().replaceAll(' ', '');
       final password = passwordController.text.trim();
 
       var res = await ApiService.post("auth/signup", {
         "name": name,
         "email": email,
-        "phone": phone,
+        "phone": phone,  // "+91 7230953540" format में जाएगा
         "password": password,
       });
 
@@ -194,8 +196,7 @@ class _SignupScreenState extends State<SignupScreen> {
                                   isTablet ? 48.0 : 32.0,
                                 ),
                                 child: Column(
-                                  crossAxisAlignment:
-                                  CrossAxisAlignment.stretch,
+                                  crossAxisAlignment: CrossAxisAlignment.stretch,
                                   children: [
                                     Text(
                                       'Sign up',
@@ -215,8 +216,7 @@ class _SignupScreenState extends State<SignupScreen> {
                                         fontSize: isTablet ? 15 : 13,
                                       ),
                                     ),
-                                    SizedBox(
-                                        height: isTablet ? 36.0 : 24.0),
+                                    SizedBox(height: isTablet ? 36.0 : 24.0),
 
                                     _buildResponsiveTextField(
                                       controller: nameController,
@@ -226,8 +226,7 @@ class _SignupScreenState extends State<SignupScreen> {
                                       theme: theme,
                                       isTablet: isTablet,
                                     ),
-                                    SizedBox(
-                                        height: isTablet ? 20 : 16),
+                                    SizedBox(height: isTablet ? 20 : 16),
 
                                     _buildResponsiveTextField(
                                       controller: emailController,
@@ -238,19 +237,45 @@ class _SignupScreenState extends State<SignupScreen> {
                                       theme: theme,
                                       isTablet: isTablet,
                                     ),
-                                    SizedBox(
-                                        height: isTablet ? 20 : 16),
+                                    SizedBox(height: isTablet ? 20 : 16),
 
+                                    // ✅ PHONE FIELD - पहले से +91 के साथ
                                     _buildResponsiveTextField(
                                       controller: phoneController,
-                                      label: 'Phone',
+                                      label: 'Phone (10 digits)',
+                                      hintText: '7230953540',
                                       keyboardType: TextInputType.phone,
                                       icon: Icons.phone_outlined,
                                       theme: theme,
                                       isTablet: isTablet,
+                                      onChanged: (value) {
+                                        // ✅ Smart +91 handling
+                                        if (!value.startsWith('+91')) {
+                                          final cleanNumber = value.replaceAll(RegExp(r'[^0-9]'), '');
+                                          if (cleanNumber.length <= 10) {
+                                            phoneController.value = TextEditingValue(
+                                              text: '+91 $cleanNumber',
+                                              selection: TextSelection.collapsed(
+                                                offset: '+91 '.length + cleanNumber.length,
+                                              ),
+                                            );
+                                          }
+                                        } else {
+                                          // +91 के बाद सिर्फ 10 digits
+                                          final after91 = value.substring('+91 '.length);
+                                          final cleanAfter = after91.replaceAll(RegExp(r'[^0-9]'), '');
+                                          if (cleanAfter.length > 10) {
+                                            phoneController.value = TextEditingValue(
+                                              text: '+91 ${cleanAfter.substring(0, 10)}',
+                                              selection: TextSelection.collapsed(
+                                                offset: '+91 '.length + 10,
+                                              ),
+                                            );
+                                          }
+                                        }
+                                      },
                                     ),
-                                    SizedBox(
-                                        height: isTablet ? 20 : 16),
+                                    SizedBox(height: isTablet ? 20 : 16),
 
                                     _buildResponsiveTextField(
                                       controller: passwordController,
@@ -262,16 +287,14 @@ class _SignupScreenState extends State<SignupScreen> {
                                       theme: theme,
                                       isTablet: isTablet,
                                     ),
-                                    SizedBox(
-                                        height: isTablet ? 36.0 : 24.0),
+                                    SizedBox(height: isTablet ? 36.0 : 24.0),
 
                                     // BUTTON
                                     Container(
                                       height: isTablet ? 64 : 56,
                                       decoration: BoxDecoration(
                                         borderRadius:
-                                        BorderRadius.circular(
-                                            isTablet ? 24 : 18),
+                                        BorderRadius.circular(isTablet ? 24 : 18),
                                         gradient: LinearGradient(
                                           colors: [
                                             colorScheme.primary,
@@ -282,19 +305,15 @@ class _SignupScreenState extends State<SignupScreen> {
                                           BoxShadow(
                                             color: colorScheme.primary
                                                 .withOpacity(0.3),
-                                            blurRadius:
-                                            isTablet ? 25 : 20,
-                                            offset:
-                                            const Offset(0, 12),
+                                            blurRadius: isTablet ? 25 : 20,
+                                            offset: const Offset(0, 12),
                                           ),
                                         ],
                                       ),
                                       child: loading
                                           ? Center(
-                                        child:
-                                        CircularProgressIndicator(
-                                          color:
-                                          colorScheme.onPrimary,
+                                        child: CircularProgressIndicator(
+                                          color: colorScheme.onPrimary,
                                           strokeWidth: 3,
                                         ),
                                       )
@@ -302,71 +321,51 @@ class _SignupScreenState extends State<SignupScreen> {
                                         color: Colors.transparent,
                                         child: InkWell(
                                           borderRadius:
-                                          BorderRadius.circular(
-                                              isTablet
-                                                  ? 24
-                                                  : 18),
+                                          BorderRadius.circular(isTablet ? 24 : 18),
                                           onTap: signup,
                                           child: Center(
                                             child: Text(
                                               'SIGN UP',
                                               style: TextStyle(
-                                                color: colorScheme
-                                                    .onPrimary,
-                                                fontSize: isTablet
-                                                    ? 20
-                                                    : 17,
-                                                fontWeight:
-                                                FontWeight.bold,
+                                                color: colorScheme.onPrimary,
+                                                fontSize: isTablet ? 20 : 17,
+                                                fontWeight: FontWeight.bold,
                                                 letterSpacing:
-                                                isTablet
-                                                    ? 1.5
-                                                    : 1.2,
+                                                isTablet ? 1.5 : 1.2,
                                               ),
                                             ),
                                           ),
                                         ),
                                       ),
                                     ),
-                                    SizedBox(
-                                        height: isTablet ? 32 : 20),
+                                    SizedBox(height: isTablet ? 32 : 20),
 
                                     // LOGIN LINK
                                     Padding(
                                       padding: EdgeInsets.symmetric(
-                                          horizontal:
-                                          isTablet ? 32 : 0),
+                                          horizontal: isTablet ? 32 : 0),
                                       child: Row(
-                                        mainAxisAlignment:
-                                        MainAxisAlignment.center,
+                                        mainAxisAlignment: MainAxisAlignment.center,
                                         children: [
                                           Text(
                                             "Already have an account? ",
                                             style: TextStyle(
-                                              color: colorScheme
-                                                  .onSurfaceVariant,
-                                              fontSize: isTablet
-                                                  ? 15
-                                                  : 13.5,
+                                              color: colorScheme.onSurfaceVariant,
+                                              fontSize: isTablet ? 15 : 13.5,
                                             ),
                                           ),
                                           GestureDetector(
                                             onTap: () =>
-                                                Navigator
-                                                    .pushReplacementNamed(
+                                                Navigator.pushReplacementNamed(
                                                   context,
                                                   '/login',
                                                 ),
                                             child: Text(
                                               "Login",
                                               style: TextStyle(
-                                                color:
-                                                colorScheme.primary,
-                                                fontWeight:
-                                                FontWeight.w700,
-                                                fontSize: isTablet
-                                                    ? 16
-                                                    : 14,
+                                                color: colorScheme.primary,
+                                                fontWeight: FontWeight.w700,
+                                                fontSize: isTablet ? 16 : 14,
                                               ),
                                             ),
                                           ),
@@ -391,13 +390,15 @@ class _SignupScreenState extends State<SignupScreen> {
     );
   }
 
-  // TEXT FIELD
+  // RESPONSIVE TEXT FIELD
   Widget _buildResponsiveTextField({
     required TextEditingController controller,
     required String label,
+    String? hintText,
     IconData? icon,
     TextInputType? keyboardType,
     bool obscure = false,
+    ValueChanged<String>? onChanged,
     required ThemeData theme,
     required bool isTablet,
   }) {
@@ -416,22 +417,27 @@ class _SignupScreenState extends State<SignupScreen> {
         controller: controller,
         keyboardType: keyboardType,
         obscureText: obscure,
+        onChanged: onChanged,
         style: TextStyle(
           color: colorScheme.onSurface,
           fontSize: isTablet ? 18 : 16,
         ),
         decoration: InputDecoration(
           labelText: label,
+          hintText: hintText,
           floatingLabelBehavior: FloatingLabelBehavior.auto,
           labelStyle: TextStyle(
             color: colorScheme.onSurfaceVariant,
             fontSize: isTablet ? 16 : 14,
           ),
           prefixIcon: icon != null
-              ? Icon(
-            icon,
-            color: colorScheme.primary.withOpacity(0.8),
-            size: isTablet ? 24 : 20,
+              ? Padding(
+            padding: EdgeInsets.all(isTablet ? 16 : 12),
+            child: Icon(
+              icon,
+              color: colorScheme.primary.withOpacity(0.8),
+              size: isTablet ? 24 : 20,
+            ),
           )
               : null,
           border: InputBorder.none,
@@ -443,4 +449,5 @@ class _SignupScreenState extends State<SignupScreen> {
       ),
     );
   }
+
 }

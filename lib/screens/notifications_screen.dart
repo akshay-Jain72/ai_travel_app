@@ -236,33 +236,16 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
     return Column(
       children: [
-        // 🔥 RESPONSIVE TWO BIG BUTTONS
+        // 🔥 SINGLE BIG BUTTON - Device WhatsApp Only
         Container(
           margin: EdgeInsets.all(isTablet ? 24 : 16),
-          child: Row(
-            children: [
-              Expanded(
-                child: _buildActionButton(
-                  icon: Icons.phone_android,
-                  label: '📱 Device WhatsApp (${travelers.length})',
-                  bgColor: Colors.blue.shade600,
-                  onTap: _isSending ? null : _sendToAllTravelers,
-                  theme: theme,
-                  isTablet: isTablet,
-                ),
-              ),
-              SizedBox(width: isTablet ? 16 : 12),
-              Expanded(
-                child: _buildActionButton(
-                  icon: Icons.rocket_launch,
-                  label: '🚀 Real WhatsApp (${travelers.length})',
-                  bgColor: Colors.green.shade600,
-                  onTap: _isSending ? null : _sendRealWhatsAppToAll,
-                  theme: theme,
-                  isTablet: isTablet,
-                ),
-              ),
-            ],
+          child: _buildActionButton(
+            icon: Icons.phone_android,
+            label: '📱 Device WhatsApp (${travelers.length})',
+            bgColor: Colors.blue.shade600,
+            onTap: _isSending ? null : _sendToAllTravelers,
+            theme: theme,
+            isTablet: isTablet,
           ),
         ),
 
@@ -510,7 +493,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     );
   }
 
-  // ALL OTHER METHODS SAME - _sendToAllTravelers, _sendRealWhatsAppToAll, _sendWhatsAppToTraveler
+  // Device WhatsApp को सभी travelers को भेजना
   Future<void> _sendToAllTravelers() async {
     setState(() => _isSending = true);
     int sent = 0;
@@ -537,40 +520,6 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('✅ $sent/${travelers.length} को Device WhatsApp भेजा!')),
     );
-  }
-
-  Future<void> _sendRealWhatsAppToAll() async {
-    setState(() => _isSending = true);
-    try {
-      print('🚀 Sending to ${travelers.length} travelers: $travelers');
-      final res = await ApiService.sendWhatsAppToAll(widget.itineraryId);
-
-      print('✅ Backend Response: $res');
-
-      if (res['status'] == true) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('✅ ${res['sent'] ?? 0}/${res['total'] ?? travelers.length} को Real WhatsApp भेजा!'),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 4),
-          ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('❌ ${res['message'] ?? 'Failed'} (${res['sent'] ?? 0}/${res['total'] ?? 0})'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } catch (e) {
-      print('❌ Network Error: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Network error: $e')),
-      );
-    } finally {
-      setState(() => _isSending = false);
-    }
   }
 
   Future<void> _sendWhatsAppToTraveler(Map<String, dynamic> notif) async {

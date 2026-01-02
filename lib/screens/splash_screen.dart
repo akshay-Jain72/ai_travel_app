@@ -67,7 +67,7 @@ class _SplashScreenState extends State<SplashScreen> {
 
                 // Clean title
                 const Text(
-                  'Akshay Travels',
+                  'AI Travels',
                   style: TextStyle(
                     fontSize: 32,
                     fontWeight: FontWeight.bold,

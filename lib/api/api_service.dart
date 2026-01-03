@@ -63,6 +63,40 @@ class ApiService {
     }
   }
 
+  // 🔥 ✅ NEW: PUT METHOD (ItineraryDetailScreen के लिए!)
+  static Future<Map<String, dynamic>> put(String path, Map<String, dynamic> data) async {
+    try {
+      final token = await getToken();
+      print('🔄 PUT: $baseUrl/$path | Token: ${_safeSubstring(token, 20)}');
+
+      final res = await http.put(
+        Uri.parse('$baseUrl/$path'),
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+          if (token != null && token.isNotEmpty) "Authorization": "Bearer $token",
+        },
+        body: json.encode(data),
+      );
+
+      print('📤 PUT Response: ${res.statusCode} | ${_safeSubstring(res.body, 100)}');
+
+      if (res.statusCode == 200 || res.statusCode == 201) {
+        return json.decode(res.body.isNotEmpty ? res.body : '{}');
+      } else {
+        try {
+          final errorData = json.decode(res.body);
+          return {"status": false, "message": errorData['message'] ?? 'Update failed: ${res.statusCode}'};
+        } catch (e) {
+          return {"status": false, "message": "Server error: ${res.statusCode} - ${_safeSubstring(res.body, 50)}"};
+        }
+      }
+    } catch (e) {
+      print('❌ PUT Error: $e');
+      return {"status": false, "message": "Network error: $e"};
+    }
+  }
+
   // ✅ LOGIN
   static Future<Map<String, dynamic>> login({
     required String email,
@@ -109,7 +143,7 @@ class ApiService {
       if (kIsWeb && file.bytes != null && file.bytes!.isNotEmpty) {
         print('🌐 Web upload: ${file.bytes!.length} bytes');
         request.files.add(http.MultipartFile.fromBytes("file", file.bytes!, filename: file.name));
-      } else if (!kIsWeb && file.path != null && file.path!.isNotEmpty) {
+      } else if (!kIsWeb && file.path != null && file.path!.isEmpty) {
         print('📱 Mobile upload: ${file.path}');
         request.files.add(await http.MultipartFile.fromPath("file", file.path!));
       } else {
@@ -175,6 +209,33 @@ class ApiService {
     }
   }
 
+  // ✅ GET SINGLE ITINERARY
+  static Future<Map<String, dynamic>> getItinerary(String id) async {
+    try {
+      final token = await getToken();
+      final url = '$baseUrl/itinerary/$id';
+      print('📋 GET Itinerary: $url | Token: ${_safeSubstring(token, 20)}');
+
+      final res = await http.get(
+        Uri.parse(url),
+        headers: {
+          "Accept": "application/json",
+          if (token != null && token.isNotEmpty) "Authorization": "Bearer $token",
+        },
+      );
+
+      print('📋 Itinerary Response: ${res.statusCode}');
+      if (res.statusCode == 200) {
+        return json.decode(res.body);
+      } else {
+        return {"status": false, "message": "Itinerary not found: ${res.statusCode}"};
+      }
+    } catch (e) {
+      print('❌ getItinerary Error: $e');
+      return {"status": false, "message": "Network error: $e"};
+    }
+  }
+
   // ✅ DELETE ITINERARY
   static Future<Map<String, dynamic>> delete(String id) async {
     try {
@@ -212,183 +273,6 @@ class ApiService {
   static Future<Map<String, dynamic>> addTraveler(Map<String, dynamic> data) async {
     print('🧑‍🤝‍🧑 addTraveler called with: ${data['name']}');
     return await post('itinerary/${data['itineraryId']}/travelers/add', data);
-  }
-
-  // ✅ 🚀 NEW: ENHANCED AI CHAT (Deep Context!)
-  static Future<Map<String, dynamic>> sendEnhancedChatMessage(
-      String prompt,
-      String itineraryId,
-      Map<String, dynamic> context,
-      ) async {
-    try {
-      final token = await getToken();
-      print('🤖 ENHANCED AI CHAT | Itinerary: $itineraryId | Token: ${_safeSubstring(token, 20)}');
-
-      final res = await http.post(
-        Uri.parse('$baseUrl/chatbot/enhanced-query'),
-        headers: {
-          "Content-Type": "application/json",
-          "Accept": "application/json",
-          if (token != null && token.isNotEmpty) "Authorization": "Bearer $token",
-        },
-        body: json.encode({
-          'prompt': prompt,
-          'itineraryId': itineraryId,
-          'context': context,
-        }),
-      );
-
-      print('🤖 AI Response: ${res.statusCode} | ${_safeSubstring(res.body, 150)}');
-
-      if (res.statusCode == 200) {
-        return json.decode(res.body);
-      } else {
-        // ✅ FALLBACK SMART RESPONSE
-        return {
-          "status": true,
-          "data": {
-            "message": "✨ AI Travel Assistant: Your query received! Here's what I found for your ${context['title'] ?? 'trip'}:\n\n"
-                "• Check flight status with PNR\n"
-                "• Hotel check-in: 2 PM usually\n"
-                "• Weather: Sunny ☀️\n\n"
-                "Ask more specific questions! 💬"
-          }
-        };
-      }
-    } catch (e) {
-      print('❌ Enhanced AI Error: $e');
-      // ✅ OFFLINE SMART RESPONSES
-      return {
-        "status": true,
-        "data": {
-          "message": "🌐 Offline mode: Smart Travel Tips!\n\n"
-              "✈️ **Flight**: Check airline app\n"
-              "🏨 **Hotel**: Standard check-in 2 PM\n"
-              "🚕 **Taxi**: Use Uber/Ola\n"
-              "📞 **Emergency**: Police 100, Medical 108\n\n"
-              "💡 Tip: Connect internet for live updates!"
-        }
-      };
-    }
-  }
-
-  // ✅ 🚀 NEW: GET TRIP CONTEXT (AI के लिए!)
-  static Future<Map<String, dynamic>> getTripContext(String itineraryId) async {
-    try {
-      final token = await getToken();
-      print('📋 GET Trip Context: $itineraryId');
-
-      final res = await http.get(
-        Uri.parse('$baseUrl/itinerary/$itineraryId/context'),
-        headers: {
-          "Accept": "application/json",
-          if (token != null && token.isNotEmpty) "Authorization": "Bearer $token",
-        },
-      );
-
-      if (res.statusCode == 200) {
-        final data = json.decode(res.body);
-        print('✅ Context loaded: ${data['destination'] ?? 'N/A'}');
-        return {
-          "status": true,
-          "context": data['context'] ?? {
-            'destination': 'Your Trip',
-            'dates': 'Upcoming',
-            'hotels': ['Confirmed Hotel'],
-            'flights': [],
-          }
-        };
-      }
-    } catch (e) {
-      print('❌ Context Error: $e');
-    }
-
-    // ✅ FALLBACK CONTEXT (Udaipur specific!)
-    return {
-      "status": true,
-      "context": {
-        'itineraryId': itineraryId,
-        'title': 'Udaipur Adventure',
-        'destination': 'Udaipur, Rajasthan',
-        'dates': 'Dec 2025',
-        'hotels': ['Lake Pichola Hotel', 'Taj Lake Palace'],
-        'flights': ['UDR - Udaipur Airport'],
-        'activities': ['City Palace', 'Lake Pichola Boat', 'Saheliyon ki Bari'],
-        'emergencyContacts': ['Police: 100', 'Medical: 108', 'Tourist Helpline: 1800-200-7788']
-      }
-    };
-  }
-
-  // ✅ UPDATED: SMART AI CHAT (Auto-enhanced!)
-  static Future<Map<String, dynamic>> sendChatMessage(String message, String itineraryId) async {
-    try {
-      // ✅ Automatically get context + enhance!
-      final contextResponse = await getTripContext(itineraryId);
-      final context = contextResponse['context'];
-
-      // ✅ Smart intent detection
-      final intent = _detectChatIntent(message.toLowerCase());
-
-      final enhancedPrompt = jsonEncode({
-        'userMessage': message,
-        'intent': intent,
-        'tripContext': context,
-        'systemPrompt': 'You are EXPERT Travel Assistant for Udaipur trips. Give specific local info with addresses, phone numbers, timings.',
-      });
-
-      return await sendEnhancedChatMessage(enhancedPrompt, itineraryId, context);
-    } catch (e) {
-      print('❌ Smart Chat Error: $e');
-      return {
-        "status": true,
-        "data": {
-          "message": "🤖 Travel AI: Hi! Ask me about:\n\n"
-              "✈️ Flight status\n"
-              "🏨 Hotel check-in (Lake Pichola: 2 PM)\n"
-              "🍽️ Best restaurants (Millets - 14/4 City Palace Rd)\n"
-              "🚨 Emergency: Police 100\n\n"
-              "What do you need help with? 💬"
-        }
-      };
-    }
-  }
-
-  // ✅ INTENT DETECTOR (Smart!)
-  static String _detectChatIntent(String message) {
-    if (message.contains('flight') || message.contains('airport') || message.contains('pnr')) return 'flight';
-    if (message.contains('hotel') || message.contains('check') || message.contains('room')) return 'hotel';
-    if (message.contains('weather') || message.contains('rain')) return 'weather';
-    if (message.contains('food') || message.contains('eat') || message.contains('restaurant')) return 'food';
-    if (message.contains('emergency') || message.contains('help') || message.contains('police')) return 'emergency';
-    if (message.contains('taxi') || message.contains('uber') || message.contains('ola')) return 'transport';
-    return 'general';
-  }
-
-  // ✅ GET SINGLE ITINERARY
-  static Future<Map<String, dynamic>> getItinerary(String id) async {
-    try {
-      final token = await getToken();
-      final url = '$baseUrl/itinerary/$id';
-      print('📋 GET Itinerary: $url | Token: ${_safeSubstring(token, 20)}');
-
-      final res = await http.get(
-        Uri.parse(url),
-        headers: {
-          "Accept": "application/json",
-          if (token != null && token.isNotEmpty) "Authorization": "Bearer $token",
-        },
-      );
-
-      print('📋 Itinerary Response: ${res.statusCode}');
-      if (res.statusCode == 200) {
-        return json.decode(res.body);
-      } else {
-        return {"status": false, "message": "Itinerary not found: ${res.statusCode}"};
-      }
-    } catch (e) {
-      print('❌ getItinerary Error: $e');
-      return {"status": false, "message": "Network error: $e"};
-    }
   }
 
   // ✅ GET TRAVELERS LIST
@@ -498,6 +382,136 @@ class ApiService {
       'itineraryId': itineraryId ?? '',
       'itineraryTitle': itineraryTitle ?? '',
     });
+  }
+
+  // ✅ ENHANCED AI CHAT (Deep Context!)
+  static Future<Map<String, dynamic>> sendEnhancedChatMessage(
+      String prompt,
+      String itineraryId,
+      Map<String, dynamic> context,
+      ) async {
+    try {
+      final token = await getToken();
+      print('🤖 ENHANCED AI CHAT | Itinerary: $itineraryId | Token: ${_safeSubstring(token, 20)}');
+
+      final res = await http.post(
+        Uri.parse('$baseUrl/chatbot/enhanced-query'),
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+          if (token != null && token.isNotEmpty) "Authorization": "Bearer $token",
+        },
+        body: json.encode({
+          'prompt': prompt,
+          'itineraryId': itineraryId,
+          'context': context,
+        }),
+      );
+
+      print('🤖 AI Response: ${res.statusCode} | ${_safeSubstring(res.body, 150)}');
+
+      if (res.statusCode == 200) {
+        return json.decode(res.body);
+      } else {
+        return {
+          "status": true,
+          "data": {
+            "message": "✨ AI Travel Assistant: Your query received! Here's what I found for your ${context['title'] ?? 'trip'}:\n\n• Check flight status with PNR\n• Hotel check-in: 2 PM usually\n• Weather: Sunny ☀️\n\nAsk more specific questions! 💬"
+          }
+        };
+      }
+    } catch (e) {
+      print('❌ Enhanced AI Error: $e');
+      return {
+        "status": true,
+        "data": {
+          "message": "🌐 Offline mode: Smart Travel Tips!\n\n✈️ **Flight**: Check airline app\n🏨 **Hotel**: Standard check-in 2 PM\n🚕 **Taxi**: Use Uber/Ola\n📞 **Emergency**: Police 100, Medical 108\n\n💡 Tip: Connect internet for live updates!"
+        }
+      };
+    }
+  }
+
+  // ✅ GET TRIP CONTEXT (AI के लिए!)
+  static Future<Map<String, dynamic>> getTripContext(String itineraryId) async {
+    try {
+      final token = await getToken();
+      print('📋 GET Trip Context: $itineraryId');
+
+      final res = await http.get(
+        Uri.parse('$baseUrl/itinerary/$itineraryId/context'),
+        headers: {
+          "Accept": "application/json",
+          if (token != null && token.isNotEmpty) "Authorization": "Bearer $token",
+        },
+      );
+
+      if (res.statusCode == 200) {
+        final data = json.decode(res.body);
+        print('✅ Context loaded: ${data['destination'] ?? 'N/A'}');
+        return {
+          "status": true,
+          "context": data['context'] ?? {
+            'destination': 'Your Trip',
+            'dates': 'Upcoming',
+            'hotels': ['Confirmed Hotel'],
+            'flights': [],
+          }
+        };
+      }
+    } catch (e) {
+      print('❌ Context Error: $e');
+    }
+
+    return {
+      "status": true,
+      "context": {
+        'itineraryId': itineraryId,
+        'title': 'Udaipur Adventure',
+        'destination': 'Udaipur, Rajasthan',
+        'dates': 'Dec 2025',
+        'hotels': ['Lake Pichola Hotel', 'Taj Lake Palace'],
+        'flights': ['UDR - Udaipur Airport'],
+        'activities': ['City Palace', 'Lake Pichola Boat', 'Saheliyon ki Bari'],
+        'emergencyContacts': ['Police: 100', 'Medical: 108', 'Tourist Helpline: 1800-200-7788']
+      }
+    };
+  }
+
+  // ✅ SMART AI CHAT (Auto-enhanced!)
+  static Future<Map<String, dynamic>> sendChatMessage(String message, String itineraryId) async {
+    try {
+      final contextResponse = await getTripContext(itineraryId);
+      final context = contextResponse['context'];
+      final intent = _detectChatIntent(message.toLowerCase());
+
+      final enhancedPrompt = jsonEncode({
+        'userMessage': message,
+        'intent': intent,
+        'tripContext': context,
+        'systemPrompt': 'You are EXPERT Travel Assistant for Udaipur trips. Give specific local info with addresses, phone numbers, timings.',
+      });
+
+      return await sendEnhancedChatMessage(enhancedPrompt, itineraryId, context);
+    } catch (e) {
+      print('❌ Smart Chat Error: $e');
+      return {
+        "status": true,
+        "data": {
+          "message": "🤖 Travel AI: Hi! Ask me about:\n\n✈️ Flight status\n🏨 Hotel check-in (Lake Pichola: 2 PM)\n🍽️ Best restaurants (Millets - 14/4 City Palace Rd)\n🚨 Emergency: Police 100\n\nWhat do you need help with? 💬"
+        }
+      };
+    }
+  }
+
+  // ✅ INTENT DETECTOR (Smart!)
+  static String _detectChatIntent(String message) {
+    if (message.contains('flight') || message.contains('airport') || message.contains('pnr')) return 'flight';
+    if (message.contains('hotel') || message.contains('check') || message.contains('room')) return 'hotel';
+    if (message.contains('weather') || message.contains('rain')) return 'weather';
+    if (message.contains('food') || message.contains('eat') || message.contains('restaurant')) return 'food';
+    if (message.contains('emergency') || message.contains('help') || message.contains('police')) return 'emergency';
+    if (message.contains('taxi') || message.contains('uber') || message.contains('ola')) return 'transport';
+    return 'general';
   }
 
   // ✅ GET ANALYTICS

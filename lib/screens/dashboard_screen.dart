@@ -287,12 +287,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
         child: InkWell(
             borderRadius: BorderRadius.circular(isTablet ? 24 : 20),
-            onTap: () => Navigator.pushNamed(
-              context,
-              '/itinerary-detail',
-              arguments: item,
-            ).then((_) => _loadItineraries()),
-            child: Padding(
+          onTap: () {
+            print('🚀 Dashboard CLICK - ID: ${item['_id']}');
+
+            // 🔥 SAFE itinerary object बनाओ
+            final safeItinerary = {
+              '_id': item['_id']?.toString() ?? '',
+              'title': item['title'] ?? 'Untitled',
+              'destination': item['destination'] ?? '',
+              'startDate': item['startDate'] ?? '',
+              'endDate': item['endDate'] ?? '',
+              'travelerType': item['travelerType'] ?? 'Solo',
+              'travelerCount': item['travelerCount'] ?? 0,
+              'days': item['days'] ?? [],
+              'status': item['status'] ?? 'draft',
+              'description': item['description'] ?? '',
+            };
+
+            print('🚀 Sending to DetailScreen: ${safeItinerary['_id']}');
+
+            Navigator.pushNamed(context, '/itinerary-detail', arguments: safeItinerary)
+                .then((_) => _loadItineraries());
+          },
+
+          child: Padding(
                 padding: EdgeInsets.all(isTablet ? 24 : 20),
                 child: Row(
                   children: [

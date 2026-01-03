@@ -32,7 +32,7 @@ const upload = multer({
   }
 });
 
-// 🔥 FIXED UPLOAD - SIMPLIFIED (NO CRASH!)
+// 🔥 UPLOAD
 router.post("/upload", auth, upload.single("file"), async (req, res) => {
   try {
     console.log('📤 REQ.BODY:', req.body);
@@ -105,7 +105,7 @@ router.post("/upload", auth, upload.single("file"), async (req, res) => {
   }
 });
 
-// 🔥 FIXED GET - REAL TRAVELER COUNT!
+// 🔥 GET ALL
 router.get("/", auth, async (req, res) => {
   try {
     const itineraries = await Itinerary.find({ userId: req.user.id })
@@ -135,7 +135,7 @@ router.get("/", auth, async (req, res) => {
   }
 });
 
-// ✅ GET Single
+// ✅ GET SINGLE
 router.get("/:id", auth, async (req, res) => {
   try {
     const itinerary = await Itinerary.findOne({
@@ -153,6 +153,70 @@ router.get("/:id", auth, async (req, res) => {
     res.json({ status: true, data: itineraryWithCount });
   } catch (error) {
     console.error('💥 Get Single Error:', error);
+    res.status(500).json({ status: false, message: error.message });
+  }
+});
+
+// 🔥 EDIT ITINERARY (NEW!)
+router.put("/:id", auth, async (req, res) => {
+  try {
+    const { title, days, destination, startDate, endDate, travelerType, description } = req.body;
+
+    console.log('✏️ EDITING:', req.params.id, 'by', req.user.id);
+
+    const itinerary = await Itinerary.findOneAndUpdate(
+      { _id: req.params.id, userId: req.user.id },
+      {
+        title: title?.trim() || 'Untitled',
+        days: days || [],
+        destination: destination || 'Multiple Cities',
+        startDate: startDate || null,
+        endDate: endDate || null,
+        travelerType: travelerType || 'Solo',
+        description: description || '',
+        status: 'active'
+      },
+      { new: true, populate: 'travelers' }
+    );
+
+    if (!itinerary) {
+      return res.status(404).json({ status: false, message: "Itinerary not found" });
+    }
+
+    res.json({
+      status: true,
+      message: "✅ Itinerary updated successfully!",
+      data: {
+        ...itinerary.toObject(),
+        travelerCount: itinerary.travelers?.length || 0
+      }
+    });
+  } catch (error) {
+    console.error('💥 Edit Error:', error);
+    res.status(500).json({ status: false, message: error.message });
+  }
+});
+
+// ✅ DELETE
+router.delete("/:id", auth, async (req, res) => {
+  try {
+    const itinerary = await Itinerary.findOne({
+      _id: req.params.id,
+      userId: req.user.id
+    });
+
+    if (!itinerary) {
+      return res.status(404).json({ status: false, message: "Not found" });
+    }
+
+    // Delete travelers
+    await Traveler.deleteMany({ itineraryId: req.params.id });
+
+    await Itinerary.deleteOne({ _id: req.params.id });
+
+    res.json({ status: true, message: "✅ Deleted successfully" });
+  } catch (error) {
+    console.error('💥 Delete Error:', error);
     res.status(500).json({ status: false, message: error.message });
   }
 });

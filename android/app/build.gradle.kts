@@ -24,16 +24,21 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        multiDexEnabled = true
     }
 
     buildTypes {
         release {
-            // 🔥 APK OPEN FIX - ये 3 lines crucial हैं!
-            minifyEnabled false
-            shrinkResources false
+            // 🔥 APK CRASH FIX - ये 3 लाइन्स जरूरी हैं!
+            isMinifyEnabled = false
+            isShrinkResources = false
             signingConfig = signingConfigs.getByName("debug")
         }
     }
+}
+
+dependencies {
+    implementation("androidx.multidex:multidex:2.0.1")
 }
 
 flutter {

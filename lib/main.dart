@@ -4,9 +4,8 @@ import 'package:provider/provider.dart';
 // Providers
 import 'providers/auth_provider.dart';
 
-// Screens
-import 'screens/splash_screen.dart';
-import 'screens/signup_screen.dart';
+// Screens - SPLASH FILE DELETE कर दिया ✅
+import 'screens/signup_screen.dart';  // 🔥 DIRECT START
 import 'screens/login_screen.dart';
 import 'screens/forget_password_screen.dart';
 import 'screens/dashboard_screen.dart';
@@ -32,16 +31,13 @@ class MyApp extends StatelessWidget {
       child: MaterialApp(
         title: 'AI Travel Support App',
         debugShowCheckedModeBanner: false,
-        initialRoute: '/splash',
+        initialRoute: '/signup',  // 🔥 DIRECT SIGNUP - NO SPLASH!
 
         routes: {
-          // Splash
-          '/splash': (_) => const SplashScreen(),
-
-          // Auth ✅ UPDATED!
+          // Auth - SPLASH हटाया ✅
+          '/signup': (_) => const SignupScreen(),  // 🔥 पहला screen
           '/login': (_) => LoginScreen(),
-          '/signup': (_) => const SignupScreen(),
-          '/forgot': (_) => const ForgetPasswordScreen(),  // ✅ baseUrl REMOVED!
+          '/forgot': (_) => const ForgetPasswordScreen(),
 
           // Main
           '/dashboard': (_) => const DashboardScreen(),
@@ -57,7 +53,6 @@ class MyApp extends StatelessWidget {
             );
           },
 
-          // Notifications with arguments
           '/notifications': (context) {
             final Object? args = ModalRoute.of(context)?.settings.arguments;
             final mapArgs = args as Map<String, dynamic>?;
@@ -67,7 +62,6 @@ class MyApp extends StatelessWidget {
             );
           },
 
-          // AI Chat with arguments
           '/ai-chat': (context) {
             final Object? args = ModalRoute.of(context)?.settings.arguments;
             final mapArgs = args as Map<String, dynamic>?;
@@ -77,7 +71,6 @@ class MyApp extends StatelessWidget {
             );
           },
 
-          // Itinerary detail screen
           '/itinerary-detail': (context) {
             final Object? args = ModalRoute.of(context)?.settings.arguments;
             final itinerary = (args as Map<String, dynamic>?) ?? {};

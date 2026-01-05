@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import '../api/api_service.dart';
+import 'dart:io'; // ✅ MOBILE FILE SUPPORT
 
 class UploadItineraryScreen extends StatefulWidget {
   @override
@@ -30,7 +31,6 @@ class _UploadItineraryScreenState extends State<UploadItineraryScreen> {
     final isSmallPhone = screenWidth < 360;
 
     return Scaffold(
-      // ✅ ADAPTIVE BACKGROUND
       backgroundColor: colorScheme.surfaceVariant,
       appBar: AppBar(
         title: Text(
@@ -351,24 +351,31 @@ class _UploadItineraryScreenState extends State<UploadItineraryScreen> {
   }
 
   Widget _buildResponsiveUploadButton(ThemeData theme, ColorScheme colorScheme, bool isTablet) {
+    // ✅ MOBILE VALIDATION FIX
+    final bool hasValidFileData = _selectedFile != null &&
+        (_selectedFile!.bytes != null ||
+            _selectedFile!.path != null ||
+            _selectedFile!.readStream != null);
+
     final isFormValid = _formKey.currentState?.validate() == true &&
-        _titleController.text.isNotEmpty &&
-        _destinationController.text.isNotEmpty &&
+        _titleController.text.trim().isNotEmpty &&
+        _destinationController.text.trim().isNotEmpty &&
         _startDate != null &&
-        _endDate != null;
+        _endDate != null &&
+        hasValidFileData;
 
     return Container(
       height: isTablet ? 72 : 64,
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: isFormValid && _selectedFile != null && !_isUploading
+          colors: isFormValid && !_isUploading
               ? [colorScheme.primary, colorScheme.primaryContainer]
               : [colorScheme.onSurfaceVariant.withOpacity(0.3), colorScheme.onSurfaceVariant.withOpacity(0.2)],
         ),
         borderRadius: BorderRadius.circular(isTablet ? 32 : 24),
         boxShadow: [
           BoxShadow(
-            color: colorScheme.primary.withOpacity(isFormValid && _selectedFile != null ? 0.4 : 0.1),
+            color: colorScheme.primary.withOpacity(isFormValid ? 0.4 : 0.1),
             blurRadius: isTablet ? 35 : 25,
             offset: Offset(0, isTablet ? 16 : 12),
           ),
@@ -378,7 +385,7 @@ class _UploadItineraryScreenState extends State<UploadItineraryScreen> {
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(isTablet ? 32 : 24),
-          onTap: isFormValid && _selectedFile != null && !_isUploading
+          onTap: isFormValid && !_isUploading
               ? () async {
             if (_formKey.currentState!.validate()) {
               await _uploadItinerary();
@@ -470,24 +477,48 @@ class _UploadItineraryScreenState extends State<UploadItineraryScreen> {
     );
   }
 
-  // ALL ORIGINAL METHODS SAME - _pickFile, _selectStartDate, _selectEndDate, _uploadItinerary, _resetForm
+  // ✅ MOBILE FIXED _pickFile()
   Future<void> _pickFile() async {
     try {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['pdf', 'csv', 'json'],
+        withReadStream: true, // ✅ MOBILE FIX
       );
+
       if (result != null && result.files.isNotEmpty) {
         final file = result.files.first;
+
+        // ✅ Size check
         if (file.size > 10 * 1024 * 1024) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('File too large! Max 10MB'), backgroundColor: Colors.red));
+          ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('❌ File zyada bada! Max 10MB'),
+                  backgroundColor: Colors.red));
           return;
         }
+
+        // ✅ MOBILE DEBUG
+        print('📱 FILE DEBUG:');
+        print('Name: ${file.name}');
+        print('Size: ${file.size} bytes');
+        print('Path: ${file.path ?? "NO PATH"}');
+        print('Bytes: ${file.bytes?.length ?? 0}');
+        print('ReadStream: ${file.readStream != null}');
+
         setState(() => _selectedFile = file);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('✅ ${file.name} selected'), backgroundColor: Colors.green));
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+                content: Text('✅ ${file.name} selected (${(file.size/1024).toStringAsFixed(1)}KB)'),
+                backgroundColor: Colors.green
+            )
+        );
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
+      print('❌ PICK FILE ERROR: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('❌ File select nahi ho paya: $e'),
+              backgroundColor: Colors.red)
+      );
     }
   }
 
@@ -521,8 +552,16 @@ class _UploadItineraryScreenState extends State<UploadItineraryScreen> {
     }
   }
 
+  // ✅ MOBILE FIXED _uploadItinerary()
   Future<void> _uploadItinerary() async {
     setState(() => _isUploading = true);
+
+    print('🚀 UPLOAD STARTING:');
+    print('Title: ${_titleController.text}');
+    print('File: ${_selectedFile?.name}');
+    print('File Path: ${_selectedFile?.path}');
+    print('File Bytes: ${_selectedFile?.bytes?.length}');
+
     try {
       final response = await ApiService.uploadItinerary(
         path: "itinerary/upload",
@@ -535,20 +574,26 @@ class _UploadItineraryScreenState extends State<UploadItineraryScreen> {
         file: _selectedFile!,
       );
 
+      print('📡 API RESPONSE: $response');
+
       if (response['status'] == true) {
         _resetForm();
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('✅ Itinerary created successfully!'), backgroundColor: Colors.green),
+            SnackBar(content: Text('✅ Itinerary ban gaya!'), backgroundColor: Colors.green)
         );
         Navigator.pop(context, true);
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('❌ ${response['message'] ?? 'Upload failed'}'), backgroundColor: Colors.red),
+            SnackBar(
+                content: Text('❌ ${response['message'] ?? 'Upload fail'}'),
+                backgroundColor: Colors.red
+            )
         );
       }
     } catch (e) {
+      print('❌ UPLOAD ERROR: $e');
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('❌ Network error: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text('❌ Network error: $e'), backgroundColor: Colors.red)
       );
     } finally {
       setState(() => _isUploading = false);

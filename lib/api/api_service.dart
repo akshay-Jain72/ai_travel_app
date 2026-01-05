@@ -143,7 +143,7 @@ class ApiService {
       if (kIsWeb && file.bytes != null && file.bytes!.isNotEmpty) {
         print('🌐 Web upload: ${file.bytes!.length} bytes');
         request.files.add(http.MultipartFile.fromBytes("file", file.bytes!, filename: file.name));
-      } else if (!kIsWeb && file.path != null && file.path!.isEmpty) {
+      } else if (!kIsWeb && file.path != null && file.path!.isNotEmpty) {
         print('📱 Mobile upload: ${file.path}');
         request.files.add(await http.MultipartFile.fromPath("file", file.path!));
       } else {
